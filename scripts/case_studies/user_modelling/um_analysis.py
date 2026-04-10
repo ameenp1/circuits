@@ -7,17 +7,14 @@ import pandas as pd
 import plotnine as p9
 from circuits.analysis.circuit_ops import Circuit
 from circuits.analysis.cluster import NeuronId
+from circuits.utils.constants import RESULTS_DIR
 from user_modelling import _prepare_split_examples
 from util.subject import Subject, llama31_8B_instruct_config
 
-from env_util import ENV
-if ENV.ARTIFACTS_DIR is None:
-    raise RuntimeError("ARTIFACTS_DIR must be set in the .env file")
-
-ARTIFACTS_DIR = Path(ENV.ARTIFACTS_DIR) / "user_modelling_circuit_hypotheses"
-RESULTS_DIR = Path(ENV.ARTIFACTS_DIR) / "results" / "case_studies" / "user_modelling"
-CIRCUIT_PICKLE = RESULTS_DIR / "wikipedia_gender_circuit.pkl"
-JAPAN_CIRCUIT_PICKLE = RESULTS_DIR / "japan_circuit.pkl"
+ARTIFACTS_DIR = Path("results/user_modelling_circuit_hypotheses")
+UM_RESULTS_DIR = RESULTS_DIR / "case_studies/user_modelling"
+CIRCUIT_PICKLE = RESULTS_DIR / "case_studies/user_modelling/wikipedia_gender_circuit.pkl"
+JAPAN_CIRCUIT_PICKLE = RESULTS_DIR / "case_studies/user_modelling/japan_circuit.pkl"
 
 p9.theme_set(
     p9.theme_bw(base_size=10)
@@ -154,7 +151,7 @@ def plot_features_by_layer(
             legend_position="none",
         )
     )
-    path = RESULTS_DIR / "roc_auc_score_distribution.png"
+    path = UM_RESULTS_DIR / "roc_auc_score_distribution.png"
     path.parent.mkdir(parents=True, exist_ok=True)
     plot.save(path, dpi=300)
 
@@ -170,7 +167,7 @@ def plot_features_by_layer(
         + p9.facet_wrap("~feature_type", nrow=1, scales="free_y")
         + p9.theme(figure_size=(6, 2.5), legend_position="none")
     )
-    path = RESULTS_DIR / "features_by_layer.png"
+    path = UM_RESULTS_DIR / "features_by_layer.png"
     path.parent.mkdir(parents=True, exist_ok=True)
     plot.save(path, dpi=300)
     print(f"Saved features by layer plot to {path}")

@@ -1,0 +1,9 @@
+dataset: language_switching
+output_path: results/case_studies/language_switching_circuit.pkl
+percentage_threshold: 0.005
+batch_size: 1
+k: 10
+apply_blacklist: false
+verbose: false
+model_id: Qwen/Qwen3-32B
+gpus_per_model: 2

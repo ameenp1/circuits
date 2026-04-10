@@ -409,21 +409,6 @@ async def cluster_with_hypotheses(
         **cluster_params,
     )
 
-    cluster_labels_override = list(circuit.data_circuit.get("cluster_labels", []) or [])
-    max_cluster_id = max(cluster_label_to_id.values(), default=-1)
-    if max_cluster_id >= 0:
-        if len(cluster_labels_override) <= max_cluster_id:
-            cluster_labels_override.extend(
-                [
-                    f"Cluster {idx}"
-                    for idx in range(len(cluster_labels_override), max_cluster_id + 1)
-                ]
-            )
-        for label_str, cluster_id in cluster_label_to_id.items():
-            cluster_labels_override[cluster_id] = label_str
-        circuit.data_circuit["cluster_labels"] = cluster_labels_override
-        circuit._manual_cluster_labels = list(cluster_labels_override)  # type: ignore[attr-defined]
-
     if verbose:
         logger.info(
             "cluster_with_hypotheses: created %d unique cluster labels",
@@ -433,19 +418,45 @@ async def cluster_with_hypotheses(
     return cluster_label_to_id
 
 
-def _parse_input_variable(value: str) -> NeuronId:
+def _parse_input_variable(value: str | NeuronId) -> NeuronId:
     """
-    Convert the "layer, neuron, polarity" string into a NeuronId.
+    Convert an input_variable value into a NeuronId with token=-1.
+
+    Handles:
+    - NeuronId objects (returns copy with token=-1)
+    - Canonical string format "layer,token,neuron" (from NeuronId.to_string())
+    - Legacy string format "layer, neuron, polarity" (space after comma)
+
+    Args:
+        value: Either a NeuronId or a string representation.
+
+    Returns:
+        NeuronId with token=-1 (for compatibility with token-summed data).
+
+    Raises:
+        ValueError: If string format is unrecognized.
     """
     if isinstance(value, NeuronId):
         return NeuronId(
             layer=int(value.layer), token=-1, neuron=int(value.neuron), polarity=value.polarity
         )
+
     value_str = str(value)
+
+    # Try canonical format first: "layer,token,neuron" (no spaces)
+    if ", " not in value_str and "," in value_str:
+        try:
+            return NeuronId.from_string(value_str)._replace(token=-1)
+        except ValueError:
+            pass
+
+    # Fallback to legacy format: "layer, neuron, polarity" (space after comma)
     parts = value_str.split(", ")
     if len(parts) != 3:
         raise ValueError(f"Unexpected input_variable format: {value}")
     layer_str, neuron_str, polarity = parts
+    if polarity not in ("+", "-"):
+        raise ValueError(f"Invalid polarity in input_variable: {polarity}")
     return NeuronId(layer=int(layer_str), token=-1, neuron=int(neuron_str), polarity=polarity)
 
 

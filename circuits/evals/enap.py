@@ -9,9 +9,8 @@ import time
 from typing import Literal
 
 import torch as t
-from circuits.analysis.process_circuits import prepare_cis
-from circuits.core.core import get_all_pairs_cl_so_effects_with_attributions
-from circuits.core.jvp import ADAGConfig, get_all_pairs_cl_ja_effects_with_attributions
+from circuits.tracing.clja import ADAGConfig, get_all_pairs_cl_ja_effects_with_attributions
+from circuits.tracing.trace import prepare_cis
 from circuits.utils.dictionary_loading_utils import load_saes_and_submodules
 from circuits.utils.modeling_utils import SparseAct
 from tqdm import tqdm
@@ -235,7 +234,6 @@ class ENAP(BaseMethod):
         self.topk_edges = getattr(args, "topk_edges", None)
         self.edge_weight_type = getattr(args, "edge_weight_type", "final_attr")
         self.use_relp_grad = getattr(args, "use_relp_grad", False)
-        self.use_shapley_grad = getattr(args, "use_shapley_grad", False)
         self.disable_stop_grad = getattr(args, "disable_stop_grad", False)
         self.use_stop_grad_on_mlps = getattr(args, "use_stop_grad_on_mlps", False)
         self.disable_half_rule = getattr(args, "disable_half_rule", False)
@@ -293,7 +291,7 @@ class ENAP(BaseMethod):
         clean_prefixes = [e["clean_prefix"] for e in examples]
         clean_answers = [[e["clean_answer"].strip()] for e in examples]
 
-        cis, attention_masks, focus_tokens, keep_pos, starts = prepare_cis(
+        cis, attention_masks, focus_tokens, _focus_probs, keep_pos, starts = prepare_cis(
             self.model,
             self.tokenizer,
             clean_prefixes,
@@ -343,9 +341,7 @@ class ENAP(BaseMethod):
                     topk=None,
                     batch_aggregation="any",
                     topk_neurons=self.topk_neurons,
-                    use_shapley_grad=self.use_shapley_grad,
                     use_relp_grad=self.use_relp_grad,
-                    use_shapley_qk=False,
                     disable_stop_grad=self.disable_stop_grad,
                     use_stop_grad_on_mlps=self.use_stop_grad_on_mlps,
                     disable_half_rule=self.disable_half_rule,
@@ -357,7 +353,8 @@ class ENAP(BaseMethod):
                     ig_mode=self.ig_mode,
                 )
                 nodes, edges = get_all_pairs_cl_ja_effects_with_attributions(
-                    subject=self.model,
+                    model=self.model.model._model,
+                    tokenizer=self.tokenizer,
                     cis=cis,
                     config=config,
                     src_tokens=keep_pos,
@@ -382,9 +379,7 @@ class ENAP(BaseMethod):
                     tgt_tokens=[max(keep_pos) for _ in range(1)],
                     batch_aggregation="any",
                     topk_neurons=self.topk_neurons,
-                    use_shapley_grad=self.use_shapley_grad,
                     use_relp_grad=self.use_relp_grad,
-                    use_shapley_qk=False,
                     disable_stop_grad=self.disable_stop_grad,
                     use_stop_grad_on_mlps=self.use_stop_grad_on_mlps,
                     disable_half_rule=self.disable_half_rule,

@@ -10,16 +10,13 @@ import plotnine as p9
 from capitals import city_state_capital
 from circuits.analysis.circuit_ops import Circuit
 from circuits.analysis.cluster import NeuronId
+from circuits.utils.constants import RESULTS_DIR
 from tqdm import tqdm
 from util.subject import Subject, llama31_8B_instruct_config
 
-from env_util import ENV
-if ENV.ARTIFACTS_DIR is None:
-    raise RuntimeError("ARTIFACTS_DIR must be set in the .env file")
-
-ARTIFACTS_DIR = Path(ENV.ARTIFACTS_DIR) / "capitals_circuit_hypotheses"
-TEXAS_PICKLE = ARTIFACTS_DIR / "case_studies" / "texas_circuit.pkl"
-CIRCUIT_PICKLE = ARTIFACTS_DIR / "case_studies" / "capitals_circuit.pkl"
+ARTIFACTS_DIR = Path("results/capitals_circuit_hypotheses")
+TEXAS_PICKLE = RESULTS_DIR / "case_studies/texas_circuit.pkl"
+CIRCUIT_PICKLE = RESULTS_DIR / "case_studies/capitals_circuit.pkl"
 
 
 """
@@ -84,7 +81,7 @@ manual_clusters = {
 
 
 p9.theme_set(
-    p9.theme_bw(base_size=10)
+    p9.theme_bw(base_size=10, base_family="Palatino")
     + p9.theme(
         text=p9.element_text(color="#000"),
         # figure_size=(2.5, 2.5),
@@ -108,22 +105,22 @@ def steering_analysis(
     texas_mode: bool = False,
 ):
     # create directory for results
-    directory = ARTIFACTS_DIR / "case_studies" / "capitals"
-    directory.mkdir(parents=True, exist_ok=True)
+    directory = RESULTS_DIR / "case_studies/capitals"
+    # directory.mkdir(parents=True, exist_ok=True)
 
-    # get the top neuron
-    circuit.subject.generate(circuit.cis[0], max_new_tokens=10, verbose=True)
+    # # get the top neuron
+    # circuit.subject.generate(circuit.cis[0], max_new_tokens=10, verbose=True)
 
-    # sum over tokens and get descriptions
-    circuit.df_edge = pd.DataFrame(columns=circuit.df_edge.columns)
-    circuit.cluster(
-        n_clusters=0,
-        include_attr_contrib=False,
-        do_one_cluster_per_neuron=True,
-        get_desc=False,
-        verbose=True,
-        sum_over_tokens=True,
-    )
+    # # sum over tokens and get descriptions
+    # circuit.df_edge = pd.DataFrame(columns=circuit.df_edge.columns)
+    # circuit.cluster(
+    #     n_clusters=0,
+    #     include_attr_contrib=False,
+    #     do_one_cluster_per_neuron=True,
+    #     get_desc=False,
+    #     verbose=True,
+    #     sum_over_tokens=True,
+    # )
 
     # collect all results
     dfs = []
@@ -161,74 +158,83 @@ def steering_analysis(
             print("=" * 100)
 
     else:
-        for top_neuron_tuple in [
-            (23, -1, 8079),
-        ]:
-            circuit.clear_steering_results()
-            # for multiplier in tqdm([0, 1], desc="Steering"):
-            for multiplier in tqdm(
-                [0, 0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0],
-                desc="Steering",
-            ):
-                circuit.steer(
-                    custom_neuron_ids=[top_neuron_tuple],
-                    multiplier=multiplier,
-                    verbose=False,
-                    store_results=True,
+        if not os.path.exists(directory / "capitals_label_probs_vs_multiplier.csv"):
+            for top_neuron_tuple in [
+                (23, -1, 8079),
+            ]:
+                circuit.clear_steering_results()
+                # for multiplier in tqdm([0, 1], desc="Steering"):
+                for multiplier in tqdm(
+                    [0, 0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0],
+                    desc="Steering",
+                ):
+                    circuit.steer(
+                        custom_neuron_ids=[top_neuron_tuple],
+                        multiplier=multiplier,
+                        verbose=False,
+                        store_results=True,
+                    )
+
+                # analyse
+                cluster_to_output = circuit.cluster_to_output
+                dfs.append(
+                    cluster_to_output.assign(
+                        neuron=f"L{top_neuron_tuple[0]}/N{top_neuron_tuple[2]}"
+                    )
                 )
 
-            # analyse
-            cluster_to_output = circuit.cluster_to_output
-            dfs.append(
-                cluster_to_output.assign(neuron=f"L{top_neuron_tuple[0]}/N{top_neuron_tuple[2]}")
+            cluster_to_output = pd.concat(dfs)
+            all_labels = cluster_to_output.label.unique().tolist()
+            for city, state, capital in city_state_capital:
+                true_label = [x for x in all_labels if capital in x]
+                if len(true_label) == 0:
+                    continue
+                true_label = true_label[0]
+                mask = cluster_to_output.label == true_label
+                cluster_to_output.loc[mask, "state_token"] = circuit.tokenizer.encode(" " + state)[
+                    1
+                ]
+                cluster_to_output.loc[mask, "city_token"] = circuit.tokenizer.encode(" " + city)[1]
+                cluster_to_output.loc[mask, "capital_token"] = circuit.tokenizer.encode(
+                    " " + capital
+                )[1]
+
+            # get probs
+            cluster_to_output["state_prob"] = cluster_to_output.apply(
+                lambda x: x["probs"][int(x["state_token"])].item(), axis=1
+            )
+            cluster_to_output["city_prob"] = cluster_to_output.apply(
+                lambda x: x["probs"][int(x["city_token"])].item(), axis=1
+            )
+            cluster_to_output["capital_prob"] = cluster_to_output.apply(
+                lambda x: x["probs"][int(x["capital_token"])].item(), axis=1
             )
 
-        cluster_to_output = pd.concat(dfs)
-        all_labels = cluster_to_output.label.unique().tolist()
-        for city, state, capital in city_state_capital:
-            true_label = [x for x in all_labels if capital in x]
-            if len(true_label) == 0:
-                continue
-            true_label = true_label[0]
-            mask = cluster_to_output.label == true_label
-            cluster_to_output.loc[mask, "state_token"] = circuit.tokenizer.encode(" " + state)[1]
-            cluster_to_output.loc[mask, "city_token"] = circuit.tokenizer.encode(" " + city)[1]
-            cluster_to_output.loc[mask, "capital_token"] = circuit.tokenizer.encode(" " + capital)[
-                1
-            ]
+            # pivot into long form for plotting
+            prob_cols = ["state_prob", "city_prob", "capital_prob"]
+            cluster_to_output_long = cluster_to_output.melt(
+                id_vars=["multiplier", "label", "neuron"],
+                value_vars=prob_cols,
+                var_name="prob_type",
+                value_name="probability",
+            )
+            prob_label_map = {
+                "state_prob": "p(State)",
+                "city_prob": "p(City)",
+                "capital_prob": "p(Capital)",
+            }
+            cluster_to_output_long["prob_type"] = cluster_to_output_long["prob_type"].map(
+                prob_label_map
+            )
 
-        # get probs
-        cluster_to_output["state_prob"] = cluster_to_output.apply(
-            lambda x: x["probs"][int(x["state_token"])].item(), axis=1
-        )
-        cluster_to_output["city_prob"] = cluster_to_output.apply(
-            lambda x: x["probs"][int(x["city_token"])].item(), axis=1
-        )
-        cluster_to_output["capital_prob"] = cluster_to_output.apply(
-            lambda x: x["probs"][int(x["capital_token"])].item(), axis=1
-        )
-
-        # pivot into long form for plotting
-        prob_cols = ["state_prob", "city_prob", "capital_prob"]
-        cluster_to_output_long = cluster_to_output.melt(
-            id_vars=["multiplier", "label", "neuron"],
-            value_vars=prob_cols,
-            var_name="prob_type",
-            value_name="probability",
-        )
-        prob_label_map = {
-            "state_prob": "p(State)",
-            "city_prob": "p(City)",
-            "capital_prob": "p(Capital)",
-        }
-        cluster_to_output_long["prob_type"] = cluster_to_output_long["prob_type"].map(
-            prob_label_map
-        )
-
-        # save dataframe to csv
-        cluster_to_output_long.to_csv(
-            directory / "capitals_label_probs_vs_multiplier.csv", index=False
-        )
+            # save dataframe to csv
+            cluster_to_output_long.to_csv(
+                directory / "capitals_label_probs_vs_multiplier.csv", index=False
+            )
+        else:
+            cluster_to_output_long = pd.read_csv(
+                directory / "capitals_label_probs_vs_multiplier.csv"
+            )
 
         # plot against multiplier for each probability type
         plot = (
@@ -240,10 +246,10 @@ def steering_analysis(
             + p9.stat_summary(p9.aes(color="prob_type"), geom="line", alpha=1.0, size=2)
             + p9.scale_color_brewer(type="qual", palette="Set1")
             + p9.facet_grid("neuron~prob_type")
-            + p9.theme(figure_size=(6, 2.5), legend_position="none")
+            + p9.theme(figure_size=(4, 2), legend_position="none")
             + p9.labs(x="Steering multiplier", y="Probability")
         )
-        plot.save(directory / "capitals_label_probs_vs_multiplier.png", dpi=300)
+        plot.save(directory / "capitals_label_probs_vs_multiplier.pdf", dpi=300)
 
 
 def export_full_node_subset(
@@ -321,13 +327,26 @@ def export_full_node_subset(
 def main() -> None:
     if not TEXAS_PICKLE.exists():
         print(f"Missing Texas circuit pickle at {TEXAS_PICKLE}")
-        return
 
-    circuit = Circuit.load_from_pickle(str(TEXAS_PICKLE))
-    circuit.set_subject(Subject(llama31_8B_instruct_config))
-    circuit.subject.generate(circuit.cis[0], max_new_tokens=10, verbose=True)
+    subject = Subject(llama31_8B_instruct_config)
+    from circuits.tracing.trace import prepare_cis
+
+    result = prepare_cis(
+        subject,
+        subject.tokenizer,
+        ["What is the capital of the state containing Dallas?"],
+        ["Answer:"],
+        true_answers=["Austin"],
+        k=5,
+    )
+    print(subject.tokenizer.decode(result[0][0].input_ids))
+
+    # circuit = Circuit.load_from_pickle(str(CIRCUIT_PICKLE))
+    # circuit.set_subject(Subject(llama31_8B_instruct_config))
+    circuit = None
+    # circuit.subject.generate(circuit.cis[0], max_new_tokens=10, verbose=True)
     # steering_analysis(circuit, texas_mode=True)
-    export_full_node_subset(circuit, topk_edges=1_000)
+    # export_full_node_subset(circuit, topk_edges=1_000)
 
     # if not CIRCUIT_PICKLE.exists():
     #     print(f"Missing capitals circuit pickle at {CIRCUIT_PICKLE}")
@@ -336,7 +355,9 @@ def main() -> None:
     # circuit = Circuit.load_from_pickle(str(CIRCUIT_PICKLE))
     # circuit.set_subject(Subject(llama31_8B_instruct_config))
     # circuit.subject.generate(circuit.cis[0], max_new_tokens=10, verbose=True)
-    # steering_analysis(circuit, texas_mode=False)
+    steering_analysis(circuit, texas_mode=False)
+
+    # os.system("luce artifact upload aryaman/capitals_circuit_hypotheses --force")
 
 
 if __name__ == "__main__":

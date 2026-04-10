@@ -1,16 +1,15 @@
 [project]
 name = "circuits"
-version = "0.0.1"
+version = "0.0.2"
 description = "Circuits discovery and evaluation"
 
 requires-python = "==3.12.*"
 dependencies = [
     "util",
-    "neurondb",
-    "log_util",
     "env_util",
+    "neurondb",
     "user_modeling",
-    "opt_einsum",
+    "anthropic>=0.72.0",
     "wandb>=0.19.6",
     "jupyter>=1.0.0",
     "statsmodels>=0.14.0",
@@ -25,10 +24,9 @@ dependencies = [
     "graphviz",
     "nnsight<0.4.0",
     "sae_lens @ git+https://github.com/aryamanarora/SAELens.git",
-    "torch>=2.4.0",
-    # for MIB
-    "eap",
+    "torch==2.5.1",
     "tabulate>=0.9.0",
+    "sentence-transformers",
 ]
 
 [build-system]
@@ -47,9 +45,8 @@ allow-direct-references = true
 
 [tool.uv.sources]
 util = { path = "lib/util", editable = true }
-neurondb = { path = "lib/neurondb", editable = true }
-log_util = { path = "lib/log_util", editable = true }
 env_util = { path = "lib/env_util", editable = true }
+neurondb = { path = "lib/neurondb", editable = true }
 user_modeling = { path = "lib/user_modeling", editable = true }
 
 # Override vllm to install from source on macOS (PyPI upload is broken)

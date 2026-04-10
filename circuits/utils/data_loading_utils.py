@@ -5,7 +5,18 @@ from pathlib import Path
 from typing import Literal
 
 from circuits.utils.constants import DATASET_TASK_MAPPING
-from user_modeling.datasets.gender import Datapoint, GenderDatapoint, get_gender_dataset_by_split
+
+try:
+    from user_modeling.datasets.gender import (
+        Datapoint,
+        GenderDatapoint,
+        get_gender_dataset_by_split,
+    )
+except ImportError:
+    Datapoint = None  # type: ignore[assignment,misc]
+    GenderDatapoint = None  # type: ignore[assignment,misc]
+    get_gender_dataset_by_split = None  # type: ignore[assignment]
+
 from user_modeling.datasets.wikipedia import (
     ATTRIBUTE_PROMPTS,
     WIKIPEDIA_PROMPT_RESPONSE,
@@ -13,8 +24,6 @@ from user_modeling.datasets.wikipedia import (
     get_wikipedia_dataset_by_split,
 )
 from util.subject import Subject
-
-from env_util import ENV
 
 OBITUARY_SEED_RESPONSE = """
 Here is a possible obituary for your friend:
@@ -70,12 +79,8 @@ def make_user_model_examples(
     mode: Literal["pair", "nopair"] = "pair",
     train_examples: int = 1000,
     test_examples: int = 100,
-    output_path: str | None = None,
+    output_path: str = "data/gender_examples",
 ):
-    if output_path is None:
-        if ENV.ARTIFACTS_DIR is None:
-            raise RuntimeError("ARTIFACTS_DIR must be set in the .env file or output_path must be provided")
-        output_path = str(Path(ENV.ARTIFACTS_DIR) / "circuits" / "data" / "gender_examples")
     # load dataset
     if split in ["obituary"]:
         dataset = get_gender_dataset_by_split(subject, [split])

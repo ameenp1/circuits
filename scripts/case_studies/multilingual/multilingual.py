@@ -3,15 +3,10 @@ Generate circuits for the math case study. Excludes edges.
 """
 
 import os
-from pathlib import Path
+
 from circuits.analysis.circuit_ops import Circuit
+from circuits.utils.constants import RESULTS_DIR
 from util.subject import Subject, llama31_8B_instruct_config
-
-from env_util import ENV
-if ENV.ARTIFACTS_DIR is None:
-    raise RuntimeError("ARTIFACTS_DIR must be set in the .env file")
-
-ARTIFACTS_DIR = Path(ENV.ARTIFACTS_DIR) / "multilingual_circuit_hypotheses"
 
 subject = Subject(llama31_8B_instruct_config)
 tokenizer = subject.tokenizer
@@ -143,8 +138,8 @@ def main():
         apply_blacklist=True,
     )
 
-    os.makedirs(ARTIFACTS_DIR / "case_studies", exist_ok=True)
-    circuit.save_to_pickle(ARTIFACTS_DIR / "case_studies" / "multilingual_circuit.pkl")
+    os.makedirs(str(RESULTS_DIR / "case_studies"), exist_ok=True)
+    circuit.save_to_pickle(str(RESULTS_DIR / "case_studies/multilingual_circuit.pkl"))
 
 
 if __name__ == "__main__":

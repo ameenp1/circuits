@@ -1,0 +1,9 @@
+# Wikipedia user modelling circuit preparation (country split)
+# Set SPLIT=country (default) and SEED=0 environment variables to control the dataset.
+dataset: user_modelling
+output_path: results/case_studies/user_modelling/wikipedia_country_circuit.pkl
+percentage_threshold: 0.005
+batch_size: 4
+k: 5
+apply_blacklist: true
+verbose: false

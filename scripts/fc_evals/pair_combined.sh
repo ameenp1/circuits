@@ -187,10 +187,11 @@ if [[ $MODEL_OVERRIDE -eq 0 ]]; then
 fi
 
 if [[ -z "$OUTPUT_ROOT" ]]; then
-    OUTPUT_ROOT="${ARTIFACTS_DIR}/results"
+    OUTPUT_ROOT="${CIRCUITS_RESULTS_DIR:-results}/fc_evals"
 fi
 
-RESULTS_ROOT="${OUTPUT_ROOT}/${DATASET_GROUP}/${PAIR_MODE}"
+MODEL_SHORT="${MODEL##*/}"
+RESULTS_ROOT="${OUTPUT_ROOT}/${MODEL_SHORT}/${DATASET_GROUP}/${PAIR_MODE}"
 
 COMMON_BASE_ARGS="--config ${CONFIG_PATH} \
     --method nap \
@@ -231,10 +232,8 @@ run_extended_experiments() {
     run_experiment "$dataset" "Stop grad + RelP grad (no half rule)" "--steps 1 --use_stop_grad --use_relp_grad --use_neurons --use_mlp_acts --disable_half_rule" "$base_args"
     run_experiment "$dataset" "Delta" "--steps 1 --effect_method delta --use_neurons --use_mlp_acts" "$base_args"
     run_experiment "$dataset" "Stop grad (MLP acts)" "--steps 1 --use_stop_grad --use_neurons --use_mlp_acts" "$base_args"
-    run_experiment "$dataset" "Stop grad + Shapley grad (MLP acts)" "--steps 1 --use_stop_grad --use_shapley_grad --use_neurons --use_mlp_acts" "$base_args"
     run_experiment "$dataset" "IG baseline (MLP outputs)" "--steps 10 --use_neurons --disable_stop_grad" "$base_args"
     run_experiment "$dataset" "Stop grad (MLP outputs)" "--steps 1 --use_stop_grad --use_neurons" "$base_args"
-    run_experiment "$dataset" "Stop grad + Shapley grad (MLP outputs)" "--steps 1 --use_stop_grad --use_shapley_grad --use_neurons" "$base_args"
     run_experiment "$dataset" "Stop grad + RelP grad (MLP outputs)" "--steps 1 --use_stop_grad --use_relp_grad --use_neurons" "$base_args"
 }
 

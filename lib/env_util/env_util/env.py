@@ -2,11 +2,12 @@ import os
 from pathlib import Path
 from typing import Literal
 
+import logging
+
 from dotenv import load_dotenv
-from log_util import get_logger
 from pydantic import BaseModel
 
-logger = get_logger(__name__)
+logger = logging.getLogger(__name__)
 
 
 class EnvironmentVariables(BaseModel):
@@ -26,9 +27,15 @@ class EnvironmentVariables(BaseModel):
     PG_PORT: str | None
     PG_DATABASE: str | None
 
+    # Docent database
+    DOCENT_PG_USER: str | None
+    DOCENT_PG_PASSWORD: str | None
+    DOCENT_PG_HOST: str | None
+    DOCENT_PG_PORT: str | None
+    DOCENT_PG_DATABASE: str | None
+
     LLM_CACHE_PATH: str | None
     INSPECT_EXPERIMENT_CACHE_PATH: str | None
-    ARTIFACTS_DIR: str | None
 
     EVAL_LOGS_DIR: str | None
     ENV_TYPE: (
@@ -55,9 +62,14 @@ class EnvironmentVariables(BaseModel):
         pg_port = os.getenv("PG_PORT")
         pg_database = os.getenv("PG_DATABASE")
 
+        docent_pg_user = os.getenv("DOCENT_PG_USER")
+        docent_pg_password = os.getenv("DOCENT_PG_PASSWORD")
+        docent_pg_host = os.getenv("DOCENT_PG_HOST")
+        docent_pg_port = os.getenv("DOCENT_PG_PORT")
+        docent_pg_database = os.getenv("DOCENT_PG_DATABASE")
+
         llm_cache_path = os.getenv("LLM_CACHE_PATH")
         inspect_experiment_cache_path = os.getenv("INSPECT_EXPERIMENT_CACHE_PATH")
-        artifacts_dir = os.getenv("ARTIFACTS_DIR")
 
         eval_logs_dir = os.getenv("EVAL_LOGS_DIR")
         env_type = os.getenv("ENV_TYPE")
@@ -76,9 +88,13 @@ class EnvironmentVariables(BaseModel):
             PG_HOST=pg_host,
             PG_PORT=pg_port,
             PG_DATABASE=pg_database,
+            DOCENT_PG_USER=docent_pg_user,
+            DOCENT_PG_PASSWORD=docent_pg_password,
+            DOCENT_PG_HOST=docent_pg_host,
+            DOCENT_PG_PORT=docent_pg_port,
+            DOCENT_PG_DATABASE=docent_pg_database,
             LLM_CACHE_PATH=llm_cache_path,
             INSPECT_EXPERIMENT_CACHE_PATH=inspect_experiment_cache_path,
-            ARTIFACTS_DIR=artifacts_dir,
             EVAL_LOGS_DIR=eval_logs_dir,
             ENV_TYPE=env_type,
         )

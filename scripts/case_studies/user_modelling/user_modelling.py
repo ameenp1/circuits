@@ -4,22 +4,17 @@ Generate circuits for the Wikipedia user modelling case study.
 
 from __future__ import annotations
 
-from pathlib import Path
-
 from circuits.analysis.circuit_ops import Circuit
+from circuits.utils.constants import RESULTS_DIR
 from user_modeling.datasets.wikipedia import (
     WIKIPEDIA_PROMPT_RESPONSE,
     get_wikipedia_dataset_by_split,
 )
 from util.subject import Subject, llama31_8B_instruct_config
 
-from env_util import ENV
-if ENV.ARTIFACTS_DIR is None:
-    raise RuntimeError("ARTIFACTS_DIR must be set in the .env file")
-
 NUM_EXAMPLES = 128
 SPLITS = ("country", "gender", "occupation", "religion")
-OUTPUT_DIR = Path(ENV.ARTIFACTS_DIR) / "results" / "case_studies" / "user_modelling"
+OUTPUT_DIR = RESULTS_DIR / "case_studies/user_modelling"
 
 
 def _prepare_split_examples(

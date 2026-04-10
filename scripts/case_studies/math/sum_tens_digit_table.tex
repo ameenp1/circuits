@@ -1,0 +1,97 @@
+% Requires: \usepackage[table]{xcolor}, \usepackage{longtable}, \usepackage{booktabs}
+\definecolor{highcolor}{HTML}{2166ac}
+\definecolor{lowcolor}{HTML}{b2182b}
+\begingroup\small
+\begin{longtable}{llrrr}
+\caption{Feature scores for sum tens digit task.}
+\label{tab:sum_tens_digit} \\
+\toprule
+Feature & Description & AUROC & In-class & Out-of-class \\
+\endhead
+\midrule
+\multicolumn{5}{l}{\textbf{Target: 0}} \\
+\rowcolor{lowcolor!27!white} \neuron{30}{10649}{-} & $^-$tokens indicating numeric values, especia... & $0.152$ & $-1.91\%$ & $-0.00\%$ \\
+\rowcolor{highcolor!24!white} \neuron{29}{4814}{-} & $^-$occurrences of numeric tokens, specifical... & $0.805$ & $0.92\%$ & $0.01\%$ \\
+\rowcolor{lowcolor!26!white} \neuron{29}{13695}{-} & $^-$tokens indicating numerical results or eq... & $0.170$ & $-0.90\%$ & $-0.02\%$ \\
+\rowcolor{lowcolor!33!white} \neuron{28}{8649}{+} & $^+$tokens "one", "HAL" followed by "9000", a... & $0.081$ & $-0.76\%$ & $-0.03\%$ \\
+\rowcolor{lowcolor!27!white} \neuron{25}{5270}{-} & $^-$the token \{\{ \}\} indicating a range or... & $0.161$ & $-0.75\%$ & $-0.23\%$ \\
+\rowcolor{highcolor!29!white} \neuron{31}{1290}{-} & $^-$the word "in" when followed by a year for... & $0.867$ & $0.69\%$ & $0.19\%$ \\
+\rowcolor{lowcolor!26!white} \neuron{28}{3343}{+} & $^+$the activation occurs on specific context... & $0.168$ & $-0.58\%$ & $-0.26\%$ \\
+\rowcolor{highcolor!26!white} \neuron{31}{2718}{-} & $^-$references to specific numerical values o... & $0.828$ & $0.55\%$ & $0.02\%$ \\
+\rowcolor{highcolor!26!white} \neuron{27}{3907}{+} & $^+$references to "into" labor or conditions ... & $0.830$ & $0.49\%$ & $0.00\%$ \\
+\rowcolor{highcolor!30!white} \neuron{27}{10962}{-} & $^-$activation occurs after a significant num... & $0.884$ & $0.42\%$ & $0.01\%$ \\
+\rowcolor{highcolor!26!white} \neuron{29}{8746}{+} & $^+$mathematical operations and numerical res... & $0.830$ & $0.38\%$ & $0.01\%$ \\
+\rowcolor{highcolor!27!white} \neuron{31}{5910}{-} & $^-$DOI and tax identification number formats... & $0.839$ & $0.37\%$ & $-0.00\%$ \\
+\rowcolor{lowcolor!24!white} \neuron{31}{9987}{-} & $^-$activation occurs on date-related or age-... & $0.197$ & $-0.35\%$ & $-0.05\%$ \\
+\midrule
+\multicolumn{5}{l}{\textbf{Target: 1}} \\
+\rowcolor{highcolor!31!white} \neuron{28}{9549}{-} & $^-$activation occurs when a number or calcul... & $0.891$ & $1.34\%$ & $0.01\%$ \\
+\rowcolor{lowcolor!26!white} \neuron{25}{5270}{-} & $^-$the token \{\{ \}\} indicating a range or... & $0.165$ & $-0.93\%$ & $-0.21\%$ \\
+\rowcolor{highcolor!31!white} \neuron{31}{1290}{-} & $^-$the word "in" when followed by a year for... & $0.891$ & $0.70\%$ & $0.19\%$ \\
+\rowcolor{highcolor!24!white} \neuron{27}{3024}{+} & $^+$presence of colons or parentheses amidst ... & $0.801$ & $0.29\%$ & $0.01\%$ \\
+\midrule
+\multicolumn{5}{l}{\textbf{Target: 2}} \\
+\rowcolor{lowcolor!24!white} \neuron{30}{5577}{+} & $^+$activation occurs on specific numbers tha... & $0.194$ & $-1.43\%$ & $-0.00\%$ \\
+\rowcolor{highcolor!28!white} \neuron{19}{5338}{-} & $^-$specific numerical values or tokens indic... & $0.862$ & $1.11\%$ & $0.29\%$ \\
+\rowcolor{highcolor!29!white} \neuron{21}{9679}{-} & $^-$the token "and\{\{ \}\}" when it appears ... & $0.864$ & $0.57\%$ & $0.05\%$ \\
+\rowcolor{lowcolor!24!white} \neuron{31}{9549}{-} & $^-$date tokens in the form of \{\{MM\}\}, \{... & $0.198$ & $0.24\%$ & $0.58\%$ \\
+\midrule
+\multicolumn{5}{l}{\textbf{Target: 3}} \\
+\rowcolor{highcolor!34!white} \neuron{20}{11837}{-} & $^-$numbers or statistics; specific percentag... & $0.932$ & $1.05\%$ & $0.14\%$ \\
+\rowcolor{lowcolor!24!white} \neuron{27}{3934}{-} & $^-$searches or responses in languages other ... & $0.199$ & $-0.61\%$ & $-0.35\%$ \\
+\midrule
+\multicolumn{5}{l}{\textbf{Target: 4}} \\
+\rowcolor{highcolor!37!white} \neuron{22}{568}{-} & $^-$the token "\{\{ \}\}" when it acts as a p... & $0.965$ & $1.65\%$ & $0.00\%$ \\
+\rowcolor{lowcolor!24!white} \neuron{30}{8980}{-} & $^-$presence of numbers, especially those fol... & $0.189$ & $-1.12\%$ & $-0.01\%$ \\
+\rowcolor{highcolor!34!white} \neuron{20}{11837}{-} & $^-$numbers or statistics; specific percentag... & $0.926$ & $1.02\%$ & $0.14\%$ \\
+\midrule
+\multicolumn{5}{l}{\textbf{Target: 5}} \\
+\rowcolor{highcolor!24!white} \neuron{19}{13348}{-} & $^-$presence of parentheses or commas in conj... & $0.811$ & $0.65\%$ & $0.09\%$ \\
+\rowcolor{lowcolor!28!white} \neuron{26}{5789}{-} & $^-$highlighted numbers within the context of... & $0.149$ & $0.40\%$ & $0.59\%$ \\
+\midrule
+\multicolumn{5}{l}{\textbf{Target: 6}} \\
+\rowcolor{highcolor!24!white} \neuron{26}{8050}{-} & $^-$the opening token of parentheses \{\{(\}\... & $0.801$ & $0.73\%$ & $0.00\%$ \\
+\rowcolor{highcolor!30!white} \neuron{24}{8034}{+} & $^+$historical context, notably related to Ly... & $0.882$ & $0.70\%$ & $0.02\%$ \\
+\rowcolor{lowcolor!27!white} \neuron{18}{7477}{-} & $^-$mentions of numerical details, particular... & $0.161$ & $-0.62\%$ & $-0.18\%$ \\
+\rowcolor{highcolor!35!white} \neuron{21}{13150}{-} & $^-$sequences indicating pagination or numeri... & $0.946$ & $0.61\%$ & $0.00\%$ \\
+\rowcolor{highcolor!26!white} \neuron{27}{6959}{-} & $^-$references to specific dates or years in ... & $0.831$ & $0.39\%$ & $0.00\%$ \\
+\rowcolor{highcolor!25!white} \neuron{23}{12230}{+} & $^+$specific instances of "the" before signif... & $0.819$ & $0.33\%$ & $0.00\%$ \\
+\midrule
+\multicolumn{5}{l}{\textbf{Target: 7}} \\
+\rowcolor{lowcolor!29!white} \neuron{31}{4769}{+} & $^+$occurrences of the token "\{\{'" or "\{\{... & $0.136$ & $-1.71\%$ & $-0.22\%$ \\
+\rowcolor{highcolor!30!white} \neuron{19}{6862}{+} & $^+$presence of page ranges in publication re... & $0.884$ & $1.27\%$ & $0.27\%$ \\
+\rowcolor{lowcolor!24!white} \neuron{30}{6208}{-} & $^-$year references in a legal or historical ... & $0.193$ & $-1.07\%$ & $-0.03\%$ \\
+\rowcolor{highcolor!26!white} \neuron{19}{5338}{-} & $^-$specific numerical values or tokens indic... & $0.829$ & $0.99\%$ & $0.30\%$ \\
+\rowcolor{highcolor!24!white} \neuron{23}{12607}{-} & $^-$mentions of notable films, trials, and ev... & $0.806$ & $0.77\%$ & $0.03\%$ \\
+\rowcolor{lowcolor!25!white} \neuron{28}{4868}{+} & $^+$the token "\{\{ \}\}" appears in the cont... & $0.180$ & $-0.49\%$ & $-0.01\%$ \\
+\rowcolor{lowcolor!24!white} \neuron{30}{6642}{-} & $^-$a mention of a numeric value or quantity ... & $0.195$ & $-0.46\%$ & $0.00\%$ \\
+\rowcolor{highcolor!24!white} \neuron{24}{11746}{+} & $^+$tokens representing dates or timestamps, ... & $0.800$ & $0.45\%$ & $0.15\%$ \\
+\rowcolor{highcolor!28!white} \neuron{27}{13853}{-} & $^-$syntax errors in code snippets (e.g. uncl... & $0.854$ & $0.44\%$ & $0.14\%$ \\
+\midrule
+\multicolumn{5}{l}{\textbf{Target: 8}} \\
+\rowcolor{highcolor!35!white} \neuron{19}{6862}{+} & $^+$presence of page ranges in publication re... & $0.941$ & $1.59\%$ & $0.24\%$ \\
+\rowcolor{highcolor!38!white} \neuron{22}{7431}{+} & $^+$tokens indicating page ranges, specifical... & $0.987$ & $0.97\%$ & $0.01\%$ \\
+\rowcolor{highcolor!31!white} \neuron{29}{7280}{+} & $^+$Activation occurs on tokens representing ... & $0.894$ & $0.91\%$ & $0.00\%$ \\
+\rowcolor{lowcolor!27!white} \neuron{30}{1231}{-} & $^-$the character "\{" before numbers or rela... & $0.158$ & $-0.90\%$ & $-0.03\%$ \\
+\rowcolor{highcolor!29!white} \neuron{20}{9739}{+} & $^+$mathematical or statistical values and ca... & $0.865$ & $0.86\%$ & $0.11\%$ \\
+\rowcolor{highcolor!28!white} \neuron{24}{9147}{+} & $^+$mentions of movies or television shows, p... & $0.852$ & $0.63\%$ & $0.00\%$ \\
+\rowcolor{highcolor!25!white} \neuron{31}{7221}{+} & $^+$mentions of historical events or figures ... & $0.824$ & $0.59\%$ & $0.25\%$ \\
+\rowcolor{lowcolor!27!white} \neuron{30}{9625}{-} & $^-$references to years or numerical informat... & $0.157$ & $-0.50\%$ & $-0.00\%$ \\
+\rowcolor{highcolor!24!white} \neuron{27}{13951}{+} & $^+$tokens representing years, conjunctions, ... & $0.807$ & $0.25\%$ & $0.01\%$ \\
+\midrule
+\multicolumn{5}{l}{\textbf{Target: 9}} \\
+\rowcolor{highcolor!28!white} \neuron{28}{6838}{-} & $^-$years and dates (e.g., "182", "197", "584... & $0.851$ & $2.36\%$ & $1.40\%$ \\
+\rowcolor{highcolor!24!white} \neuron{29}{9469}{-} & $^-$tokens related to numbers or numerical da... & $0.811$ & $1.61\%$ & $1.11\%$ \\
+\rowcolor{lowcolor!30!white} \neuron{30}{7201}{+} & $^+$word "los" in various contexts and "proba... & $0.116$ & $-1.09\%$ & $-0.01\%$ \\
+\rowcolor{highcolor!30!white} \neuron{31}{4769}{-} & $^-$presence of numeric data or statistical f... & $0.880$ & $0.89\%$ & $0.08\%$ \\
+\rowcolor{lowcolor!35!white} \neuron{31}{14328}{-} & $^-$the word "all" in the context of file pro... & $0.055$ & $-0.84\%$ & $-0.03\%$ \\
+\rowcolor{highcolor!25!white} \neuron{20}{9739}{+} & $^+$mathematical or statistical values and ca... & $0.816$ & $0.81\%$ & $0.12\%$ \\
+\rowcolor{highcolor!33!white} \neuron{31}{7221}{+} & $^+$mentions of historical events or figures ... & $0.917$ & $0.74\%$ & $0.23\%$ \\
+\rowcolor{highcolor!33!white} \neuron{26}{3988}{-} & $^-$mentions of specific numbers & $0.921$ & $0.63\%$ & $0.00\%$ \\
+\rowcolor{highcolor!33!white} \neuron{28}{13880}{+} & $^+$numeric values following a dot \{\{.\}\},... & $0.916$ & $0.59\%$ & $0.00\%$ \\
+\rowcolor{highcolor!28!white} \neuron{25}{6283}{+} & $^+$presence of the preposition "by," tempora... & $0.862$ & $0.50\%$ & $0.04\%$ \\
+\rowcolor{highcolor!31!white} \neuron{25}{1402}{+} & $^+$words representing numbers (e.g., "hundre... & $0.898$ & $0.42\%$ & $0.02\%$ \\
+\rowcolor{highcolor!26!white} \neuron{22}{3193}{-} & $^-$Page numbers or numerical references foll... & $0.837$ & $0.33\%$ & $0.00\%$ \\
+\bottomrule
+\end{longtable}
+\endgroup

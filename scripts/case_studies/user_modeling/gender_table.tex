@@ -1,0 +1,44 @@
+% Requires: \usepackage[table]{xcolor}, \usepackage{longtable}, \usepackage{booktabs}
+\definecolor{highcolor}{HTML}{2166ac}
+\definecolor{lowcolor}{HTML}{b2182b}
+\begingroup\small
+\begin{longtable}{llrrr}
+\caption{Feature scores for gender task.}
+\label{tab:gender} \\
+\toprule
+Feature & Description & AUROC & In-class & Out-of-class \\
+\endhead
+\midrule
+\multicolumn{5}{l}{\textbf{Target: female}} \\
+\rowcolor{highcolor!25!white} \neuron{12}{13860}{+} & $^+$The neuron activates on tokens that are i... & $0.820$ & $6.85\%$ & $5.79\%$ \\
+\rowcolor{highcolor!32!white} \neuron{25}{5082}{-} & $^-$tokens representing a gender indicator li... & $0.902$ & $5.00\%$ & $2.27\%$ \\
+\midrule
+\multicolumn{5}{l}{\textbf{Target: male}} \\
+\rowcolor{lowcolor!27!white} \neuron{23}{1638}{+} & $^+$the word "of" indicating a proportion or ... & $0.155$ & $-5.46\%$ & $-2.42\%$ \\
+\rowcolor{highcolor!39!white} \neuron{24}{4684}{+} & $^+$presence of specific gender markers or id... & $1.000$ & $5.18\%$ & $0.98\%$ \\
+\rowcolor{highcolor!26!white} \neuron{0}{6791}{+} & $^+$tokens related to "gender" as "\{\{gender... & $0.833$ & $4.21\%$ & $3.26\%$ \\
+\rowcolor{lowcolor!32!white} \neuron{30}{10339}{-} & $^-$activating tokens "the" and "a" in contex... & $0.090$ & $-4.05\%$ & $-1.30\%$ \\
+\rowcolor{highcolor!30!white} \neuron{27}{10585}{+} & $^+$activation on gender markers \{\{:\}\} an... & $0.876$ & $3.61\%$ & $0.02\%$ \\
+\rowcolor{highcolor!25!white} \neuron{14}{11231}{+} & $^+$terms referring to \{\{gender\}\} or \{\{... & $0.823$ & $3.21\%$ & $2.47\%$ \\
+\rowcolor{highcolor!30!white} \neuron{22}{252}{-} & $^-$activating tokens refer to descriptions o... & $0.882$ & $2.80\%$ & $1.51\%$ \\
+\midrule
+\multicolumn{5}{l}{\textbf{Target: non-binary}} \\
+\rowcolor{highcolor!39!white} \neuron{18}{7765}{+} & $^+$references to gender identity and pronoun... & $0.999$ & $10.00\%$ & $1.81\%$ \\
+\rowcolor{lowcolor!39!white} \neuron{9}{4255}{+} & $^+$N.A. & $0.012$ & $9.72\%$ & $13.50\%$ \\
+\rowcolor{lowcolor!38!white} \neuron{6}{5866}{-} & $^-$N.A. & $0.015$ & $9.61\%$ & $13.28\%$ \\
+\rowcolor{lowcolor!36!white} \neuron{11}{11321}{+} & $^+$N.A. & $0.047$ & $9.41\%$ & $12.41\%$ \\
+\rowcolor{lowcolor!39!white} \neuron{7}{6673}{-} & $^-$N.A. & $0.005$ & $7.74\%$ & $10.31\%$ \\
+\rowcolor{lowcolor!38!white} \neuron{5}{7012}{-} & $^-$N.A. & $0.018$ & $7.68\%$ & $11.40\%$ \\
+\rowcolor{highcolor!39!white} \neuron{23}{7782}{-} & $^-$the keyword "for", "as", [U+201C]or a[U+2... & $1.000$ & $6.68\%$ & $1.07\%$ \\
+\rowcolor{lowcolor!38!white} \neuron{10}{11570}{-} & $^-$N.A. & $0.014$ & $6.24\%$ & $10.73\%$ \\
+\rowcolor{lowcolor!24!white} \neuron{12}{13860}{+} & $^+$The neuron activates on tokens that are i... & $0.190$ & $5.35\%$ & $6.48\%$ \\
+\rowcolor{highcolor!35!white} \neuron{31}{2293}{+} & $^+$tokens indicating work, identity, or loca... & $0.942$ & $4.37\%$ & $0.84\%$ \\
+\rowcolor{lowcolor!40!white} \neuron{30}{4121}{+} & $^+$segments indicating addition or presence,... & $0.000$ & $-4.34\%$ & $-0.18\%$ \\
+\rowcolor{lowcolor!33!white} \neuron{3}{6390}{-} & $^-$specific tokens containing words related ... & $0.086$ & $3.59\%$ & $4.66\%$ \\
+\rowcolor{highcolor!36!white} \neuron{29}{7455}{+} & $^+$occurrence of the token "ou" in French qu... & $0.960$ & $3.37\%$ & $0.53\%$ \\
+\rowcolor{lowcolor!28!white} \neuron{2}{4786}{-} & $^-$N.A. & $0.140$ & $2.94\%$ & $3.68\%$ \\
+\rowcolor{highcolor!39!white} \neuron{20}{2837}{+} & $^+$references to LGBTQ+ identities and exper... & $0.999$ & $2.69\%$ & $0.11\%$ \\
+\rowcolor{lowcolor!39!white} \neuron{0}{6791}{+} & $^+$tokens related to "gender" as "\{\{gender... & $0.010$ & $2.61\%$ & $4.11\%$ \\
+\bottomrule
+\end{longtable}
+\endgroup

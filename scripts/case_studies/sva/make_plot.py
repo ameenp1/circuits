@@ -8,19 +8,38 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import plotnine as p9
-
-from env_util import ENV
-if ENV.ARTIFACTS_DIR is None:
-    raise RuntimeError("ARTIFACTS_DIR must be set in the .env file")
+from circuits.utils.constants import RESULTS_DIR
 
 # suppress all warnings
 warnings.filterwarnings("ignore")
 logging.basicConfig(level=logging.INFO, format="%(levelname)s:%(message)s")
 logger = logging.getLogger(__name__)
 
-# Default paths based on ENV.ARTIFACTS_DIR
-_DEFAULT_RESULTS_PREFIX = str(Path(ENV.ARTIFACTS_DIR) / "results")
-_DEFAULT_ENAP_PREFIX = str(Path(ENV.ARTIFACTS_DIR) / "enap_results")
+RESULTS_MEAN_ABL_DIR = RESULTS_DIR / "fc-mean-abl"  # model_name added in path construction
+RESULTS_MEAN_ABL2_DIR = RESULTS_DIR / "fc-mean-abl2"  # model_name added in path construction
+RESULTS_EDGES_DIR = Path("results/enap_results/")
+PLOT_SUFFIX = ".pdf"
+
+p9.theme_set(
+    p9.theme_bw(base_size=10, base_family="Palatino")
+    + p9.theme(
+        text=p9.element_text(color="#000"),
+        # figure_size=(2.5, 2.5),
+        axis_title=p9.element_text(size=10),
+        axis_text=p9.element_text(size=8),
+        axis_text_x=p9.element_text(angle=45, hjust=0.5),
+        # legend_position="bottom",
+        legend_text=p9.element_text(size=7),
+        legend_title=p9.element_text(size=8),
+        legend_key_height=0.25,
+        legend_key_spacing=0.25,
+        panel_grid_major=p9.element_line(size=1, color="#dddddd"),
+        panel_grid_minor=p9.element_blank(),
+        # legend_justification_bottom=1,
+        strip_background=p9.element_blank(),
+        legend_margin=0,
+    )
+)
 
 
 def log_plot_saved(description: str, output_path: str | Path) -> None:
@@ -72,18 +91,16 @@ def plot_selected_methods_for_nodes(
     subfolder: str = "sva/pair",
     model_name: str = "Llama-3.1-8B",
     agg: str = "sum",
-    prefix: str | None = None,
+    prefix: str = str(RESULTS_DIR / "fc_evals"),
     datasets: list[str] = ["rc", "within_rc", "nounpp", "simple"],
     width: str = "",
 ):
-    if prefix is None:
-        prefix = _DEFAULT_RESULTS_PREFIX
     print(f"PROCESSING {subfolder} | {model_name} | {agg} | {prefix} | width={width}")
-    pattern_prefix = prefix + subfolder + "/"
+    pattern_prefix = prefix + "/" + model_name + "/" + subfolder + "/"
     model = model_name
     agg_mode = agg
     width_suffix = f"_WIDTH{width}" if width else ""
-    save_path_prefix = f"{prefix}{subfolder.replace('/', '_')}_{model_name}_{agg}{width_suffix}"
+    save_path_prefix = f"{prefix}/{subfolder.replace('/', '_')}_{model_name}_{agg}{width_suffix}"
     os.makedirs(save_path_prefix, exist_ok=True)
 
     def get_file(dataset: str = "rc", opts: str = "USE_NEURONS_USE_MLPACTS", suffix: str = ""):
@@ -149,10 +166,6 @@ def plot_selected_methods_for_nodes(
                 suffix="_SUBMODULES_attn",
             )
             df_stop_grad = get_file(dataset, f"USE_NEURONS{middle}_USE_STOP_GRAD")
-            df_stop_shapley = get_file(
-                dataset,
-                f"USE_NEURONS{middle}_USE_SHAPLEY_GRAD_USE_STOP_GRAD",
-            )
             # df_stop_qk      = get_file(dataset, f"USE_NEURONS{middle}_USE_SHAPLEY_GRAD_USE_SHAPLEY_QK_USE_STOP_GRAD")
             df_stop_relp = get_file(
                 dataset,
@@ -192,7 +205,6 @@ def plot_selected_methods_for_nodes(
                     df_ig_resid.assign(method="IG (resid.)"),
                     df_ig_attn.assign(method="IG (attn.)"),
                     df_stop_grad.assign(method="Linear"),
-                    df_stop_shapley.assign(method="Linear + Shap."),
                     # df_stop_qk.assign(method="Linear + Shapley + QK"),
                     df_stop_relp.assign(method="Linear + ST"),
                     df_stop_relp_resid.assign(method="Linear + ST (resid.)"),
@@ -273,25 +285,6 @@ def plot_selected_methods_for_nodes(
     # optional sanity checks (uncomment if you want quick diagnostics)
     # print(df.groupby(["dataset","component","method","metric"])["value"].agg(['min','max','mean']).round(4))
     # print(df.dtypes)
-
-    p9.theme_set(
-        p9.theme_bw(base_size=10)
-        + p9.theme(
-            text=p9.element_text(color="#000"),
-            # figure_size=(2.5, 2.5),
-            axis_title=p9.element_text(size=10),
-            axis_text=p9.element_text(size=8),
-            axis_text_x=p9.element_text(angle=45, hjust=0.5),
-            # legend_position="bottom",
-            legend_text=p9.element_text(size=8),
-            legend_title=p9.element_text(size=9),
-            panel_grid_major=p9.element_line(size=1, color="#dddddd"),
-            panel_grid_minor=p9.element_blank(),
-            # legend_justification_bottom=1,
-            strip_background=p9.element_blank(),
-            legend_margin=0,
-        )
-    )
 
     keep_methods = {
         "Linear + ST @ MLP activations": "RelP (acts.)",
@@ -386,7 +379,7 @@ def plot_selected_methods_for_nodes(
             plot = plot + p9.scale_x_continuous(breaks=[i for i in range(0, 400 + 1, 100)])
             plot = plot + p9.coord_cartesian(xlim=(0, 400), ylim=(-0.3, 2))
         try:
-            plot_path = f"{save_path_prefix}/fc_{'log' if use_log else 'linear'}.png"
+            plot_path = f"{save_path_prefix}/fc_{'log' if use_log else 'linear'}{PLOT_SUFFIX}"
             plot.save(plot_path, dpi=300)
             log_plot_saved("Base plot", plot_path)
         except Exception as e:
@@ -417,7 +410,7 @@ def plot_selected_methods_for_nodes(
         )
         df_avg["method"] = df_avg.method.map(methods)
         df_avg["method"] = pd.Categorical(
-            df_avg["method"], categories=["MLP acts.", "MLP outs.", "Resid."], ordered=True
+            df_avg["method"], categories=["MLP acts.", "MLP outs.", "Resid.", "Attn."], ordered=True
         )
         df_avg["group"] = df_avg.apply(lambda x: f"{x.method}_{x.style}", axis=1)
         plot = (
@@ -434,7 +427,7 @@ def plot_selected_methods_for_nodes(
             + p9.geom_line(size=1, alpha=0.8)
             + p9.scale_color_brewer(type="qual", palette="Set1")
             + p9.facet_grid("~ metric")
-            + p9.theme(figure_size=(6, 2.5), legend_position="right")
+            + p9.theme(figure_size=(4, 2), legend_position="right")
             + p9.labs(x="Circuit size", y="", color="Representation", linetype="Basis")
             + p9.ylim(-0.3, 1.7)
         )
@@ -444,7 +437,7 @@ def plot_selected_methods_for_nodes(
             plot = plot + p9.scale_x_continuous(breaks=[i for i in range(0, 400 + 1, 100)])
             plot = plot + p9.coord_cartesian(xlim=(0, 400), ylim=(-0.3, 2))
         try:
-            plot_path = f"{save_path_prefix}/fc_{'log' if use_log else 'linear'}_bases.png"
+            plot_path = f"{save_path_prefix}/fc_{'log' if use_log else 'linear'}_bases{PLOT_SUFFIX}"
             plot.save(plot_path, dpi=300)
             log_plot_saved("Basis plot", plot_path)
         except Exception as e:
@@ -488,14 +481,14 @@ def plot_selected_methods_for_nodes(
                     y="value",
                     group="group",
                     color="method",
-                    linetype="style",
+                    linetype="linetype",
                 ),
             )
             + p9.geom_line(size=1, alpha=0.8)
             + p9.scale_color_brewer(type="qual", palette="Set1")
-            + p9.facet_grid("linetype ~ metric")
-            + p9.theme(figure_size=(6, 4), legend_position="right")
-            + p9.labs(x="Circuit size", y="", color="Representation", linetype="Basis")
+            + p9.facet_grid("style ~ metric")
+            + p9.theme(figure_size=(4, 3), legend_position="right")
+            + p9.labs(x="Circuit size", y="", color="Representation", linetype="Attribution")
             + p9.ylim(-0.3, 1.7)
         )
         if use_log:
@@ -504,7 +497,9 @@ def plot_selected_methods_for_nodes(
             plot = plot + p9.scale_x_continuous(breaks=[i for i in range(0, 400 + 1, 100)])
             plot = plot + p9.coord_cartesian(xlim=(0, 400), ylim=(-0.3, 2))
         try:
-            plot_path = f"{save_path_prefix}/fc_{'log' if use_log else 'linear'}_adag_ig.png"
+            plot_path = (
+                f"{save_path_prefix}/fc_{'log' if use_log else 'linear'}_adag_ig{PLOT_SUFFIX}"
+            )
             plot.save(plot_path, dpi=300)
             log_plot_saved("RelP vs. IG plot", plot_path)
         except Exception as e:
@@ -543,7 +538,7 @@ def plot_selected_methods_for_nodes(
             plot = plot + p9.scale_x_continuous(breaks=[i for i in range(0, 400 + 1, 100)])
             plot = plot + p9.coord_cartesian(xlim=(0, 400), ylim=(-0.3, 2))
         try:
-            plot_path = f"{save_path_prefix}/fc_{'log' if use_log else 'linear'}_adag_ablations.png"
+            plot_path = f"{save_path_prefix}/fc_{'log' if use_log else 'linear'}_adag_ablations{PLOT_SUFFIX}"
             plot.save(plot_path, dpi=300)
             log_plot_saved("RelP ablations plot", plot_path)
         except Exception as e:
@@ -552,163 +547,13 @@ def plot_selected_methods_for_nodes(
     df_base.to_csv(f"{save_path_prefix}/fc_base.txt", index=False)
 
 
-def plot_all_methods_for_nodes(
-    base_dir: str | None = None,
-    output_path: str | None = None,
-) -> None:
-    if base_dir is None:
-        base_dir = _DEFAULT_RESULTS_PREFIX
-    """
-    Sweep every run beneath `base_dir` and save one scatter plot per dataset.
-
-    Each subplot corresponds to a method (folder name), showing
-    completeness vs. faithfulness with marker size encoding circuit size.
-    """
-    base_path = Path(base_dir)
-    if output_path is None:
-        output_path = str(base_path / "fc_all_methods")
-    output_root = Path(output_path)
-    output_root.mkdir(parents=True, exist_ok=True)
-
-    json_paths = glob.glob(
-        str(base_path / "**" / "faithfulness_and_completeness" / "*.json"),
-        recursive=True,
-    )
-    frames: dict[str, list[pd.DataFrame]] = {}
-
-    for json_path in json_paths:
-        try:
-            df = pd.read_json(json_path)
-        except ValueError:
-            continue
-        if df.empty:
-            continue
-
-        run_dir = Path(json_path).parents[1]
-        dataset_dir = run_dir.parent
-        mode_dir = dataset_dir.parent if dataset_dir is not None else None
-        group_dir = mode_dir.parent if mode_dir is not None else None
-
-        run_name = run_dir.name
-        dataset_name = dataset_dir.name if dataset_dir is not None else "unknown"
-        mode_name = mode_dir.name if mode_dir is not None else "unknown_mode"
-        group_name = group_dir.name if group_dir is not None else "unknown_group"
-        dataset_key = f"{group_name}/{mode_name}/{dataset_name}"
-
-        frame = df.copy()
-        frame["dataset"] = dataset_name
-        frame["group"] = group_name
-        frame["mode"] = mode_name
-        frame["method"] = run_name
-        frame["subfolder"] = dataset_key
-        frames.setdefault(dataset_key, []).append(frame)
-
-    if not frames:
-        print(f"No faithfulness/completeness files found under {base_dir}")
-        return
-
-    for dataset_key, dataset_frames in frames.items():
-        if not dataset_frames:
-            continue
-        data = pd.concat(dataset_frames, ignore_index=True)
-
-        # ensure numeric columns
-        for col in ["n_nodes", "faithfulness", "completeness"]:
-            data[col] = pd.to_numeric(data[col], errors="coerce")
-        data = data.dropna(subset=["n_nodes", "faithfulness", "completeness"])
-
-        # aggregate repeated measurements (e.g., multiple seeds) by mean
-        data = (
-            data.groupby(["method", "n_nodes"], as_index=False)[["faithfulness", "completeness"]]
-            .mean()
-            .sort_values(["method", "n_nodes"])
-        )
-
-        if data.empty:
-            continue
-
-        method_order = sorted(data["method"].astype(str).unique())
-        data["method"] = pd.Categorical(data["method"], categories=method_order, ordered=True)
-
-        dataset_name = data["dataset"].iloc[0] if "dataset" in data.columns else dataset_key
-        label_order: list[str] = []
-        label_map: dict[str, str] = {}
-        for m in method_order:
-            simplified = simplify_method_label(m, dataset_name)
-            wrapped = textwrap.fill(simplified, width=36)
-            label_map[m] = wrapped
-            if wrapped not in label_order:
-                label_order.append(wrapped)
-        data["method_label"] = data["method"].apply(lambda m: label_map[str(m)])
-        data["method_label"] = pd.Categorical(
-            data["method_label"], categories=label_order, ordered=True
-        )
-
-        data = data.sort_values(["method", "n_nodes"])  # ensure ordering for lines
-        data["module"] = data["method"].apply(lambda m: infer_module_target(str(m)))
-        module_order = [
-            module
-            for module in [
-                "mlp",
-                "mlp acts",
-                "attn",
-                "resid",
-                "transcoder",
-                "mlp+attn",
-                "mlp+resid",
-            ]
-            if module in set(data["module"])
-        ]
-        for module in sorted(data["module"].unique()):
-            if module not in module_order:
-                module_order.append(module)
-        data["module"] = pd.Categorical(data["module"], categories=module_order, ordered=True)
-
-        num_methods = len(method_order)
-        num_cols = max(1, min(6, int(np.ceil(np.sqrt(num_methods)))))
-        num_rows = int(np.ceil(num_methods / num_cols))
-        figure_width = min(25, max(6, 4 * num_cols))
-        figure_height = min(25, max(4, 4 * num_rows))
-
-        for metric in ["faithfulness", "completeness"]:
-            plot = (
-                p9.ggplot(
-                    data,
-                    p9.aes(x="n_nodes", y=metric, color="module"),
-                )
-                + p9.geom_line(p9.aes(group="method"), alpha=0.6)
-                + p9.geom_point(alpha=0.85)
-                + p9.facet_wrap("~ method_label", scales="free", ncol=num_cols)
-                + p9.theme_bw(base_size=10)
-                + p9.geom_hline(yintercept=0.0, linetype="dashed", color="#bbbbbb", size=0.5)
-                + p9.geom_hline(yintercept=1.0, linetype="dashed", color="#bbbbbb", size=0.5)
-                + p9.theme(
-                    figure_size=(figure_width, figure_height),
-                    legend_position="bottom",
-                    legend_direction="horizontal",
-                    legend_title=p9.element_text(size=9),
-                    legend_text=p9.element_text(size=8),
-                )
-                + p9.scale_color_brewer(type="qual", palette="Set2", name="Module")
-                + p9.labs(title=f"{dataset_key}", x="Circuit size", y=metric.capitalize())
-                + p9.scale_x_log10(breaks=[10**i for i in range(10)])
-            )
-
-            dataset_slug = dataset_key.replace("/", "_")
-            dataset_output = output_root / f"fc_all_methods_{dataset_slug}_{metric}.png"
-            plot.save(str(dataset_output), dpi=300)
-            log_plot_saved("All-methods node plot", dataset_output)
-
-
 def plot_selected_methods_for_edges(
     model_name: str = "Llama-3.1-8B",
     agg: str = "mean",
-    prefix: str | None = None,
+    prefix: str = str(RESULTS_EDGES_DIR),
     datasets: list[str] | None = None,
     topk_edges_filter: int | None = 500000,
 ):
-    if prefix is None:
-        prefix = _DEFAULT_ENAP_PREFIX
     if datasets is None:
         datasets = ["within_rc_300", "nounpp_300", "simple_300"]
 
@@ -852,7 +697,7 @@ def plot_selected_methods_for_edges(
         elif "jvp" in method_lower and "use_stop_grad_on_mlps" in method_lower:
             keep_methods[method] = "RelP"
         elif "jvp" in method_lower:
-            keep_methods[method] = "RelP (no stop grad on MLPs)"
+            keep_methods[method] = "RelP (no stop grad)"
         else:
             keep_methods[method] = method
 
@@ -862,22 +707,6 @@ def plot_selected_methods_for_edges(
 
     df_base = df_base[df_base.method.isin(list(keep_methods.keys()))]
     df_base["method_label"] = df_base.method.map(keep_methods)
-
-    p9.theme_set(
-        p9.theme_bw(base_size=10)
-        + p9.theme(
-            text=p9.element_text(color="#000"),
-            axis_title=p9.element_text(size=10),
-            axis_text=p9.element_text(size=8),
-            axis_text_x=p9.element_text(angle=45, hjust=0.5),
-            legend_text=p9.element_text(size=8),
-            legend_title=p9.element_text(size=9),
-            panel_grid_major=p9.element_line(size=1, color="#dddddd"),
-            panel_grid_minor=p9.element_blank(),
-            strip_background=p9.element_blank(),
-            legend_margin=0,
-        )
-    )
 
     for use_log in [True, False]:
         df_interpolated = (
@@ -924,7 +753,7 @@ def plot_selected_methods_for_edges(
             )
             + p9.scale_color_brewer(type="qual", palette="Set1")
             + p9.facet_grid("dataset ~ metric")
-            + p9.theme(figure_size=(6, 2.5), legend_position="right")
+            + p9.theme(figure_size=(4, 2), legend_position="right")
             + p9.labs(x="# of edges patched", y="", color="Method")
         )
         if use_log:
@@ -933,9 +762,7 @@ def plot_selected_methods_for_edges(
             plot = plot + p9.scale_x_continuous()
 
         try:
-            plot_path = (
-                f"{save_path_prefix}/fc_edges_by_dataset_{'log' if use_log else 'linear'}.png"
-            )
+            plot_path = f"{save_path_prefix}/fc_edges_by_dataset_{'log' if use_log else 'linear'}{PLOT_SUFFIX}"
             plot.save(plot_path, dpi=300)
             log_plot_saved(f"Edge plot by dataset ({'log' if use_log else 'linear'})", plot_path)
         except Exception as e:
@@ -970,8 +797,8 @@ def plot_selected_methods_for_edges(
             + p9.geom_line(size=1, alpha=0.8)
             + p9.scale_color_brewer(type="qual", palette="Set1")
             + p9.facet_wrap("~ metric", nrow=1)
-            + p9.theme(figure_size=(6, 2.5), legend_position="right")
-            + p9.labs(x="Circuit size (num. of edges)", y="", color="Edge attribution method")
+            + p9.theme(figure_size=(4, 2), legend_position="right")
+            + p9.labs(x="Circuit size (# edges)", y="", color="Edge attr. method")
         )
         if use_log:
             plot_agg = plot_agg + p9.scale_x_log10(labels=format_scientific)
@@ -979,9 +806,7 @@ def plot_selected_methods_for_edges(
             plot_agg = plot_agg + p9.scale_x_continuous(labels=format_scientific)
 
         try:
-            plot_path = (
-                f"{save_path_prefix}/fc_edges_aggregated_{'log' if use_log else 'linear'}.png"
-            )
+            plot_path = f"{save_path_prefix}/fc_edges_aggregated_{'log' if use_log else 'linear'}{PLOT_SUFFIX}"
             plot_agg.save(plot_path, dpi=300)
             log_plot_saved(f"Aggregated edge plot ({'log' if use_log else 'linear'})", plot_path)
         except Exception as e:
@@ -991,11 +816,9 @@ def plot_selected_methods_for_edges(
 
 
 def plot_all_methods_for_edges(
-    base_dir: str | None = None,
+    base_dir: str = RESULTS_EDGES_DIR,
     output_path: str | None = None,
 ) -> None:
-    if base_dir is None:
-        base_dir = _DEFAULT_ENAP_PREFIX
     base_path = Path(base_dir)
     if output_path is None:
         output_path = str(base_path / "fc_all_methods_edges")
@@ -1103,32 +926,32 @@ def plot_all_methods_for_edges(
             )
 
             dataset_slug = dataset_key.replace("/", "_")
-            dataset_output = output_root / f"fc_all_methods_edges_{dataset_slug}_{metric}.png"
+            dataset_output = (
+                output_root / f"fc_all_methods_edges_{dataset_slug}_{metric}{PLOT_SUFFIX}"
+            )
             plot.save(str(dataset_output), dpi=300)
             log_plot_saved("All-methods edge plot", dataset_output)
 
 
 if __name__ == "__main__":
+    plot_selected_methods_for_edges(
+        model_name="Llama-3.1-8B",
+        agg="mean",
+        datasets=["within_rc_300", "nounpp_300", "simple_300", "rc_300"],
+        topk_edges_filter=500000,
+    )
     plot_selected_methods_for_nodes(subfolder="sva/pair", agg="mean")
-    exit(0)
     plot_selected_methods_for_nodes(subfolder="sva/nopair", model_name="Llama-3.1-8B", agg="mean")
     plot_selected_methods_for_nodes(subfolder="sva/nopair", model_name="Llama-3.1-8B", agg="sum")
     plot_selected_methods_for_nodes(
         subfolder="sva/nopair",
         model_name="Llama-3.1-8B",
         agg="mean",
-        prefix=str(Path(ENV.ARTIFACTS_DIR) / "results-mean-abl"),
+        prefix=str(RESULTS_MEAN_ABL_DIR),
     )
     plot_selected_methods_for_nodes(
         subfolder="sva/nopair",
         model_name="Llama-3.1-8B",
         agg="mean",
-        prefix=str(Path(ENV.ARTIFACTS_DIR) / "results-mean-abl2"),
-    )
-
-    plot_selected_methods_for_edges(
-        model_name="Llama-3.1-8B",
-        agg="mean",
-        datasets=["within_rc_300", "nounpp_300", "simple_300", "rc_300"],
-        topk_edges_filter=500000,
+        prefix=str(RESULTS_MEAN_ABL2_DIR),
     )

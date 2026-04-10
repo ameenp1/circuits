@@ -26,8 +26,6 @@ def print_args(args):
     print(f"No pair: {args.nopair}")
     print(f"Nodes only: {args.nodes_only}")
     print(f"Suffix length: {args.suffix_length}")
-    print(f"Use Shapley gradient: {args.use_shapley_grad}")
-    print(f"Use Shapley qk: {args.use_shapley_qk}")
     print(f"Use stop grad: {args.use_stop_grad}")
     print(f"Use relp grad: {args.use_relp_grad}")
     print(f"Disable half rule: {args.disable_half_rule}")
@@ -47,8 +45,6 @@ def make_save_path(args):
         + (f"_EFFECT{args.effect_method.upper()}" if args.effect_method != "ig" else "")
         + ("_USE_NEURONS" if args.use_neurons else "")
         + ("_USE_MLPACTS" if args.use_mlp_acts else "")
-        + ("_USE_SHAPLEY_GRAD" if args.use_shapley_grad else "")
-        + ("_USE_SHAPLEY_QK" if args.use_shapley_qk else "")
         + ("_USE_STOP_GRAD" if args.use_stop_grad else "")
         + ("_USE_RELP_GRAD" if args.use_relp_grad else "")
         + ("_USE_STOP_GRAD_ON_MLPS" if args.use_stop_grad_on_mlps else "")
@@ -215,12 +211,8 @@ def get_args() -> argparse.Namespace:
 
     # Our tracing methods specific arguments
     parser.add_argument(
-        "--use_shapley_grad", action="store_true", help="Use Shapley gradient for MLP gate"
-    )
-    parser.add_argument(
         "--use_relp_grad", action="store_true", help="Use RelP gradient for MLP gate"
     )
-    parser.add_argument("--use_shapley_qk", action="store_true", help="Use Shapley qk")
     parser.add_argument(
         "--use_stop_grad", action="store_true", help="Use stop gra on non-linear module"
     )

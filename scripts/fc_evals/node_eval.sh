@@ -97,7 +97,7 @@ if [[ -n "$CONFIG_OVERRIDE" ]]; then
 fi
 
 if [[ -z "$OUTPUT_ROOT" ]]; then
-    OUTPUT_ROOT="${ARTIFACTS_DIR}/nap_results_${WIDTH}/"
+    OUTPUT_ROOT="${CIRCUITS_RESULTS_DIR:-results}/fc_node_evals_${WIDTH}"
 fi
 
 RESULTS_ROOT="${OUTPUT_ROOT}/sva/pair"

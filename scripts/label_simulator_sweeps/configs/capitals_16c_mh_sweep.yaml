@@ -1,0 +1,10 @@
+# Capitals circuit: 16 clusters, min_highlights sweep
+circuit_pickle: results/case_studies/capitals_circuit.pkl
+n_clusters: 16
+min_highlights: [1, 2, 4, 8, 16, 32]
+verbose: true
+sorted_threshold: true
+use_contrib_minibatch: true
+explainer_model: Transluce/llama_8b_explainer
+simulator_model: Transluce/llama_8b_simulator
+num_expl_samples: 5

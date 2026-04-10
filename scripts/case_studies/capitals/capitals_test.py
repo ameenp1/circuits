@@ -1,4 +1,4 @@
-from circuits.analysis.process_circuits import (
+from circuits.tracing.trace import (
     ADAGConfig,
     get_all_pairs_cl_ja_effects_with_attributions,
     prepare_cis,
@@ -22,7 +22,8 @@ cis, attention_masks, focus_tokens, keep_pos, starts = prepare_cis(
     verbose=True,
 )
 node_scores, embed_scores = get_all_pairs_cl_ja_effects_with_attributions(
-    subject,
+    subject.model._model,
+    subject.tokenizer,
     cis,
     config=ADAGConfig(
         device="cuda:0",

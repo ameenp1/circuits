@@ -106,13 +106,13 @@ header "3. MODULE IMPORTS"
 # ============================================================================
 
 modules=(
-    "circuits.core:Core circuit tracing"
+    "circuits.tracing:Circuit tracing"
     "circuits.analysis:Analysis module"
+    "circuits.descriptions:Descriptions module"
     "circuits.evals:Evaluation module"
     "circuits.utils:Utils module"
+    "circuits.frontend:Frontend module"
     "util:Lib util"
-    "env_util:Environment util"
-    "log_util:Logging util"
 )
 
 for module_entry in "${modules[@]}"; do
@@ -159,6 +159,7 @@ configs=(
     "sweep/fc_evaluation/sva_pair.yaml"
     "sweep/fc_evaluation/sva_nopair.yaml"
     "sweep/fc_evaluation/sva_nopair_mean.yaml"
+    "sweep/fc_evaluation/causalgym_pair.yaml"
 )
 
 for config in "${configs[@]}"; do

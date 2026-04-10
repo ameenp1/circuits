@@ -1,4 +1,3 @@
-import os
 from pathlib import Path
 from typing import cast
 
@@ -7,18 +6,14 @@ import pandas as pd
 import plotnine as p9
 from circuits.analysis.circuit_ops import Circuit
 from circuits.analysis.cluster import NeuronId
+from circuits.utils.constants import RESULTS_DIR
 from multilingual import labels, word_to_axis, word_to_lang
 from tqdm import tqdm
 from util.subject import Subject, llama31_8B_instruct_config
 
-from env_util import ENV
-if ENV.ARTIFACTS_DIR is None:
-    raise RuntimeError("ARTIFACTS_DIR must be set in the .env file")
-
-ARTIFACTS_DIR = Path(ENV.ARTIFACTS_DIR) / "multilingual_circuit_hypotheses"
-
-RESULTS_DIR = ARTIFACTS_DIR / "case_studies" / "multilingual"
-CIRCUIT_PICKLE = ARTIFACTS_DIR / "case_studies" / "multilingual_circuit.pkl"
+ARTIFACTS_DIR = Path("results/multilingual_circuit_hypotheses")
+ML_RESULTS_DIR = RESULTS_DIR / "case_studies/multilingual"
+CIRCUIT_PICKLE = RESULTS_DIR / "case_studies/multilingual_circuit.pkl"
 
 p9.theme_set(
     p9.theme_bw(base_size=10)
@@ -143,7 +138,7 @@ def plot_features_by_layer(
             legend_position="none",
         )
     )
-    path = ARTIFACTS_DIR / "case_studies" / "multilingual" / "roc_auc_score_distribution.png"
+    path = ML_RESULTS_DIR / "roc_auc_score_distribution.pdf"
     path.parent.mkdir(parents=True, exist_ok=True)
     plot.save(path, dpi=300)
 
@@ -159,7 +154,7 @@ def plot_features_by_layer(
         + p9.facet_wrap("~feature_type", nrow=1, scales="free_y")
         + p9.theme(figure_size=(6, 2.5), legend_position="none")
     )
-    path = ARTIFACTS_DIR / "case_studies" / "multilingual" / "features_by_layer.png"
+    path = ML_RESULTS_DIR / "features_by_layer.pdf"
     path.parent.mkdir(parents=True, exist_ok=True)
     plot.save(path, dpi=300)
     print(f"Saved features by layer plot to {path}")
@@ -169,7 +164,7 @@ def steering_analysis(
     circuit: Circuit,
 ):
     # create directory for results
-    directory = ARTIFACTS_DIR / "case_studies" / "multilingual"
+    directory = RESULTS_DIR / "case_studies/multilingual"
     directory.mkdir(parents=True, exist_ok=True)
 
     if False:
@@ -298,7 +293,7 @@ def steering_analysis(
 
         # save dataframe to csv
         cluster_to_output_long.to_csv(
-            ARTIFACTS_DIR / "case_studies" / "multilingual" / "multilingual_label_probs_vs_multiplier.csv", index=False
+            directory / "multilingual_label_probs_vs_multiplier.csv", index=False
         )
 
     # plot against multiplier for each probability type
@@ -314,7 +309,7 @@ def steering_analysis(
         + p9.theme(figure_size=(6, 3), legend_position="none")
         + p9.labs(x="Steering multiplier", y="Probability")
     )
-    plot.save(ARTIFACTS_DIR / "case_studies" / "multilingual" / "multilingual_label_probs_vs_multiplier.png", dpi=300)
+    plot.save(directory / "multilingual_label_probs_vs_multiplier.pdf")
 
 
 def main():
@@ -324,6 +319,7 @@ def main():
     plot_features_by_layer(circuit)
     # steering_analysis(circuit)
     circuit.export_hypothesis_score_jsons(hypotheses, ARTIFACTS_DIR, 0.9, 0.1)
+    # os.system("luce artifact upload aryaman/multilingual_circuit_hypotheses --force")
 
 
 if __name__ == "__main__":

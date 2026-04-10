@@ -5,7 +5,6 @@ import numpy as np
 import pandas as pd
 import pyvene as pv
 import torch
-from circuits.analysis.process_circuits import convert_inputs_to_circuits
 from circuits.utils.steering_utils import (
     SubspaceZeroIntervention,
     batchify,
@@ -15,8 +14,6 @@ from circuits.utils.steering_utils import (
     prepare_circuits_for_interchange_interventions,
 )
 from tqdm import tqdm
-from user_modeling.datasets.wikipedia import get_wikipedia_dataset_by_split
-from util.subject import Subject, llama31_8B_instruct_config
 
 logger = logging.getLogger(__name__)
 if not logger.handlers:
@@ -26,54 +23,9 @@ if not logger.handlers:
 logger.setLevel(logging.INFO)
 
 
-def prepare_user_modeling_dataset(
-    subject: Subject = Subject(llama31_8B_instruct_config),
-    split: str = "gender",
-    num_datapoints: int = 1,
-    batch_size: int = 1,
-    neurons: int = 100,
-):
-    """
-    Prepare user modeling dataset for interchange interventions. Only collects neurons, not edges.
-    """
-    tokenizer = subject.tokenizer
-
-    # prepare inputs
-    datasets = get_wikipedia_dataset_by_split(subject, question_types=[f"{split}"], only_good=True)
-    # datasets["train"].datapoints = (
-    #     datasets["train"].datapoints + datasets["test"].datapoints + datasets["valid"].datapoints
-    # )
-    prompts = [datapoint.conversation[0]["content"] for datapoint in datasets["train"].datapoints][
-        :num_datapoints
-    ]
-    labels = [datapoint.latent_attributes[split][0] for datapoint in datasets["train"].datapoints][
-        :num_datapoints
-    ]
-    labels = [" " + l[0].upper() + l[1:] for l in labels]
-    seed_responses = [f"{{{{Infobox person\n| {split} ="] * len(prompts)
-
-    # prepare circuits
-    df_node, df_edge, cis, attention_masks = convert_inputs_to_circuits(
-        subject,
-        tokenizer,
-        prompts,
-        seed_responses,
-        labels,
-        neurons=neurons,
-        batch_size=batch_size,
-        num_datapoints=num_datapoints,
-        return_cis=True,
-        return_nodes_only=True,
-        ignore_bos=True,
-        skip_attr_contrib=True,
-        verbose=True,
-    )
-
-    return prompts, labels, seed_responses, df_node, df_edge, cis, attention_masks
-
-
 def run_vanilla_interchange_intervention(
-    subject: Subject,
+    model: Any,
+    tokenizer: Any,
     batches: list[dict[str, torch.Tensor]],
     batch_size: int,
     use_subspaces: bool = False,
@@ -83,8 +35,10 @@ def run_vanilla_interchange_intervention(
 
     Parameters
     ----------
-    subject : Subject
-        The subject model to intervene on.
+    model : Any
+        The raw HF model to intervene on.
+    tokenizer : Any
+        The tokenizer.
     batches : list[dict[str, torch.Tensor]]
         The batches of paired circuits to intervene on.
     batch_size : int
@@ -97,8 +51,6 @@ def run_vanilla_interchange_intervention(
     list[dict[str, Any]]
         The results of the intervention.
     """
-    model = subject.model._model
-    tokenizer = subject.tokenizer
     num_layers = int(model.config.num_hidden_layers)
     data = []
     cached_original_outputs, cached_source_outputs = [], []
@@ -142,9 +94,9 @@ def run_vanilla_interchange_intervention(
                 batch["subspaces"],
             )
 
-            # get base and src conts
-            base_conts = [tokenizer.encode(c)[1] for c in base_class]
-            source_conts = [tokenizer.encode(c)[1] for c in source_class]
+            # get base and src conts (use [-1] to handle tokenizers with/without BOS)
+            base_conts = [tokenizer.encode(c)[-1] for c in base_class]
+            source_conts = [tokenizer.encode(c)[-1] for c in source_class]
 
             # run the forward pass intervening at each token
             for pos in range(base["input_ids"].shape[-1]):
@@ -242,15 +194,14 @@ def run_vanilla_interchange_intervention(
 
 
 def run_zero_intervention(
-    subject: Subject,
+    model: Any,
+    tokenizer: Any,
     batches: list[dict[str, torch.Tensor]],
     batch_size: int,
     multiplier: float = 0.0,
     mode: Literal["parallel", "serial"] = "parallel",
     complement: bool = False,
 ):
-    model = subject.model._model
-    tokenizer = subject.tokenizer
     data = []
 
     # go through each pair
@@ -306,9 +257,9 @@ def run_zero_intervention(
         if mode == "serial":
             pv_model.is_model_stateless = True
 
-        # get base and src conts
-        base_conts = [tokenizer.encode(c)[1] for c in base_class]
-        source_conts = [tokenizer.encode(c)[1] for c in source_class]
+        # get base and src conts (use [-1] to handle tokenizers with/without BOS)
+        base_conts = [tokenizer.encode(c)[-1] for c in base_class]
+        source_conts = [tokenizer.encode(c)[-1] for c in source_class]
 
         # run the forward pass
         original_outputs, intervened_outputs = pv_model(
@@ -386,11 +337,11 @@ def run_zero_intervention(
 
 
 def get_cluster_steering_effects(
-    subject: Subject,
+    model: Any,
+    tokenizer: Any,
     df_node: pd.DataFrame,
     df_edge: pd.DataFrame,
-    df_node_embedded: pd.DataFrame,
-    df_edge_embedded: pd.DataFrame,
+    cluster_map: dict[tuple, str],
     cis: list[torch.Tensor],
     attention_masks: list[torch.Tensor],
     labels: list[str],
@@ -412,7 +363,7 @@ def get_cluster_steering_effects(
         )
 
     # define vars
-    tokenizer = subject.tokenizer
+    device = str(next(model.parameters()).device)
     diversity_stats = []
     cluster_to_cluster = []
     cluster_to_output = []
@@ -435,11 +386,9 @@ def get_cluster_steering_effects(
 
         # apply cluster data
         if custom_neuron_ids is None:
-            for _, row in df_node_embedded.iterrows():
-                node_to_cluster[
-                    (row.input_variable.layer, row.input_variable.token, row.input_variable.neuron)
-                ] = row["cluster"]
-            clusters = sorted(df_node_embedded["cluster"].unique().tolist())
+            for nid, cluster in cluster_map.items():
+                node_to_cluster[(nid.layer, nid.token, nid.neuron)] = cluster
+            clusters = sorted(set(cluster_map.values()))
             all_clusters = ["none", "all"] + clusters
         else:
             for neuron_id in custom_neuron_ids:
@@ -479,7 +428,7 @@ def get_cluster_steering_effects(
 
             # prepare circuits for intervention and run steering
             pairs = prepare_circuits_for_interchange_interventions(
-                subject=subject,
+                device=device,
                 cis=[ci],
                 attention_masks=[attention_mask],
                 labels=[label],
@@ -501,7 +450,8 @@ def get_cluster_steering_effects(
                 )
 
             data, collected_subspaces = run_zero_intervention(
-                subject,
+                model,
+                tokenizer,
                 batches,
                 batch_size,
                 multiplier=multiplier,

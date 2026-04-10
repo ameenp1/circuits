@@ -1,0 +1,119 @@
+% Requires: \usepackage[table]{xcolor}, \usepackage{longtable}, \usepackage{booktabs}
+\definecolor{highcolor}{HTML}{2166ac}
+\definecolor{lowcolor}{HTML}{b2182b}
+\begingroup\small
+\begin{longtable}{llrrr}
+\caption{Feature scores for word task.}
+\label{tab:word} \\
+\toprule
+Feature & Description & AUROC & In-class & Out-of-class \\
+\endhead
+\midrule
+\multicolumn{5}{l}{\textbf{Target: big}} \\
+\rowcolor{highcolor!40!white} \neuron{27}{3345}{-} & $^-$specific phrases that denote small or med... & $1.000$ & $5.00\%$ & $0.00\%$ \\
+\rowcolor{lowcolor!30!white} \neuron{21}{4920}{-} & $^-$activation occurs on the token "from" whe... & $0.114$ & $-3.34\%$ & $-1.21\%$ \\
+\rowcolor{lowcolor!40!white} \neuron{26}{4089}{+} & $^+$expressions indicating quantity or qualit... & $0.000$ & $-2.64\%$ & $0.00\%$ \\
+\rowcolor{highcolor!40!white} \neuron{24}{13961}{+} & $^+$appearance of words indicating direction ... & $1.000$ & $1.56\%$ & $0.00\%$ \\
+\rowcolor{highcolor!37!white} \neuron{14}{2801}{-} & $^-$tokens "largest," "biggest," "size," "sma... & $0.968$ & $1.34\%$ & $0.15\%$ \\
+\rowcolor{highcolor!31!white} \neuron{22}{9062}{+} & $^+$the tokens "about," "of the," "the," "on,... & $0.889$ & $0.75\%$ & $0.00\%$ \\
+\rowcolor{highcolor!31!white} \neuron{2}{3728}{-} & $^-$words or phrases indicating "greatness" o... & $0.889$ & $0.74\%$ & $-0.00\%$ \\
+\rowcolor{lowcolor!31!white} \neuron{23}{9337}{-} & $^-$the word "with" when discussing ease or m... & $0.111$ & $-0.67\%$ & $0.00\%$ \\
+\rowcolor{highcolor!34!white} \neuron{19}{4804}{-} & $^-$conjunctions indicating contrast (e.g., \... & $0.935$ & $0.65\%$ & $0.02\%$ \\
+\rowcolor{highcolor!29!white} \neuron{28}{9284}{+} & $^+$tokens following the phrase "create" or "... & $0.864$ & $0.60\%$ & $0.04\%$ \\
+\rowcolor{highcolor!29!white} \neuron{21}{9786}{+} & $^+$The token "\{\{[U+FF0C][CJK]\}\}" activat... & $0.872$ & $0.39\%$ & $0.02\%$ \\
+\rowcolor{lowcolor!26!white} \neuron{22}{929}{+} & $^+$colloquial use of "be" in contexts discus... & $0.173$ & $0.03\%$ & $0.50\%$ \\
+\rowcolor{highcolor!26!white} \neuron{28}{5029}{-} & $^-$presence of specific keywords/phrases tha... & $0.833$ & $0.00\%$ & $-0.49\%$ \\
+\rowcolor{highcolor!24!white} \neuron{19}{1691}{+} & $^+$tokens suggesting duality or contrast & $0.811$ & $0.00\%$ & $-0.43\%$ \\
+\midrule
+\multicolumn{5}{l}{\textbf{Target: cold}} \\
+\rowcolor{highcolor!40!white} \neuron{24}{10117}{-} & $^-$activating token precedes lists or bullet... & $1.000$ & $5.87\%$ & $0.00\%$ \\
+\rowcolor{highcolor!39!white} \neuron{26}{5654}{+} & $^+$activation on tokens indicating high temp... & $0.988$ & $3.82\%$ & $0.12\%$ \\
+\rowcolor{highcolor!35!white} \neuron{25}{9791}{+} & $^+$words that directly relate to producing o... & $0.944$ & $3.56\%$ & $0.00\%$ \\
+\rowcolor{lowcolor!39!white} \neuron{25}{2969}{-} & $^-$tokens related to temperature and warmth/... & $0.007$ & $-2.75\%$ & $-0.09\%$ \\
+\rowcolor{highcolor!35!white} \neuron{2}{1709}{-} & $^-$the word "kalter" or its variants (e.g. "... & $0.943$ & $2.65\%$ & $0.01\%$ \\
+\rowcolor{lowcolor!31!white} \neuron{30}{9108}{-} & $^-$references to keeping warm during cold se... & $0.111$ & $-2.39\%$ & $0.00\%$ \\
+\rowcolor{highcolor!35!white} \neuron{14}{13885}{-} & $^-$temperature unit "\{\{[U+00B0]C\}\}" in s... & $0.948$ & $1.17\%$ & $0.18\%$ \\
+\rowcolor{lowcolor!31!white} \neuron{19}{5652}{-} & $^-$mentions of heat, temperature, warming, o... & $0.101$ & $-1.10\%$ & $-0.22\%$ \\
+\rowcolor{highcolor!26!white} \neuron{26}{3401}{-} & $^-$occurences of "is", "one" in various cont... & $0.830$ & $0.55\%$ & $0.01\%$ \\
+\rowcolor{highcolor!26!white} \neuron{15}{6003}{-} & $^-$words and phrases related to coldness (\{... & $0.833$ & $0.35\%$ & $0.00\%$ \\
+\rowcolor{highcolor!27!white} \neuron{20}{7973}{+} & $^+$temperature ranges and conditions & $0.849$ & $0.34\%$ & $0.04\%$ \\
+\rowcolor{highcolor!27!white} \neuron{21}{4920}{-} & $^-$activation occurs on the token "from" whe... & $0.838$ & $-0.23\%$ & $-1.83\%$ \\
+\rowcolor{lowcolor!24!white} \neuron{22}{2802}{+} & $^+$highlighting of terms related to potentia... & $0.189$ & $0.00\%$ & $0.45\%$ \\
+\midrule
+\multicolumn{5}{l}{\textbf{Target: fast}} \\
+\rowcolor{highcolor!40!white} \neuron{26}{878}{+} & $^+$the word "[CYR:I]" and "[CYR:TE]" in conj... & $1.000$ & $15.65\%$ & $0.00\%$ \\
+\rowcolor{highcolor!40!white} \neuron{20}{11041}{+} & $^+$the phrase "at your own" or variations; "... & $1.000$ & $2.71\%$ & $0.06\%$ \\
+\rowcolor{highcolor!27!white} \neuron{27}{13178}{-} & $^-$occurrence of the word "be" & $0.849$ & $1.17\%$ & $0.45\%$ \\
+\rowcolor{highcolor!27!white} \neuron{20}{4961}{+} & $^+$activates on single letters or specific t... & $0.847$ & $1.10\%$ & $0.90\%$ \\
+\rowcolor{highcolor!25!white} \neuron{16}{8263}{-} & $^-$the word \{\{Fast\}\} or phrases indicati... & $0.820$ & $0.97\%$ & $0.26\%$ \\
+\rowcolor{highcolor!24!white} \neuron{22}{2802}{+} & $^+$highlighting of terms related to potentia... & $0.806$ & $0.89\%$ & $0.27\%$ \\
+\rowcolor{lowcolor!32!white} \neuron{19}{1691}{+} & $^+$tokens suggesting duality or contrast & $0.096$ & $-0.87\%$ & $-0.25\%$ \\
+\rowcolor{lowcolor!28!white} \neuron{28}{5029}{-} & $^-$presence of specific keywords/phrases tha... & $0.146$ & $-0.82\%$ & $-0.32\%$ \\
+\rowcolor{lowcolor!28!white} \neuron{19}{1643}{-} & $^-$activation occurs on references to speed ... & $0.138$ & $-0.66\%$ & $-0.05\%$ \\
+\rowcolor{highcolor!26!white} \neuron{23}{4239}{+} & $^+$emphasis on adjectives like "more," "the,... & $0.830$ & $0.59\%$ & $0.18\%$ \\
+\rowcolor{highcolor!35!white} \neuron{14}{5039}{+} & $^+$the token \{\{fast\}\} or its variants (\... & $0.943$ & $0.59\%$ & $0.01\%$ \\
+\rowcolor{highcolor!33!white} \neuron{18}{1015}{+} & $^+$context-specific queries regarding notabl... & $0.923$ & $0.50\%$ & $0.28\%$ \\
+\rowcolor{lowcolor!27!white} \neuron{13}{9722}{+} & $^+$rough or casual conversational tone; info... & $0.153$ & $-0.47\%$ & $-0.32\%$ \\
+\rowcolor{highcolor!30!white} \neuron{18}{10753}{+} & $^+$function words indicating an action or pu... & $0.885$ & $0.45\%$ & $0.09\%$ \\
+\rowcolor{lowcolor!25!white} \neuron{29}{13822}{-} & $^-$references to roles (like "model", "at", ... & $0.185$ & $-0.41\%$ & $-0.08\%$ \\
+\rowcolor{highcolor!35!white} \neuron{18}{7153}{+} & $^+$occurrences of the token "Quick" allowing... & $0.944$ & $0.40\%$ & $0.00\%$ \\
+\rowcolor{lowcolor!31!white} \neuron{22}{7122}{-} & $^-$tokens "take" or "taking" appearing in co... & $0.111$ & $-0.36\%$ & $0.00\%$ \\
+\rowcolor{highcolor!24!white} \neuron{2}{6829}{+} & $^+$occurrences of "miles per \{\{hour\}\}" a... & $0.804$ & $0.35\%$ & $0.03\%$ \\
+\rowcolor{lowcolor!24!white} \neuron{27}{13857}{-} & $^-$occurrence of delimiters "\{\{\}\}" indic... & $0.190$ & $0.12\%$ & $0.40\%$ \\
+\midrule
+\multicolumn{5}{l}{\textbf{Target: hot}} \\
+\rowcolor{highcolor!40!white} \neuron{22}{1649}{-} & $^-$activation occurs with the word "is" in c... & $1.000$ & $5.20\%$ & $0.00\%$ \\
+\rowcolor{lowcolor!35!white} \neuron{26}{10210}{+} & $^+$references to coldness or emotional detac... & $0.056$ & $-1.68\%$ & $0.00\%$ \\
+\rowcolor{highcolor!40!white} \neuron{16}{1694}{+} & $^+$the word "hot" or its variants in diverse... & $1.000$ & $1.66\%$ & $0.00\%$ \\
+\rowcolor{highcolor!31!white} \neuron{27}{6103}{+} & $^+$activation occurs on the token "to" when ... & $0.889$ & $1.65\%$ & $0.00\%$ \\
+\rowcolor{highcolor!40!white} \neuron{2}{7012}{-} & $^-$presence of "calent", "calore", "insel", ... & $1.000$ & $1.38\%$ & $0.00\%$ \\
+\rowcolor{lowcolor!32!white} \neuron{19}{5652}{-} & $^-$mentions of heat, temperature, warming, o... & $0.099$ & $-1.08\%$ & $-0.22\%$ \\
+\rowcolor{highcolor!28!white} \neuron{14}{13885}{-} & $^-$temperature unit "\{\{[U+00B0]C\}\}" in s... & $0.852$ & $0.91\%$ & $0.23\%$ \\
+\rowcolor{highcolor!40!white} \neuron{21}{6962}{+} & $^+$Tokens indicating states of comfort, seek... & $1.000$ & $0.86\%$ & $0.00\%$ \\
+\rowcolor{highcolor!24!white} \neuron{19}{2619}{+} & $^+$references to sensations related to heat,... & $0.804$ & $0.61\%$ & $0.06\%$ \\
+\rowcolor{highcolor!26!white} \neuron{0}{12140}{+} & $^+$the word "Hoh\{\{hot\}\}" when mentioned ... & $0.833$ & $0.60\%$ & $0.00\%$ \\
+\rowcolor{lowcolor!31!white} \neuron{21}{11022}{-} & $^-$"in" or "at" when used in contexts relate... & $0.111$ & $-0.58\%$ & $0.00\%$ \\
+\rowcolor{lowcolor!26!white} \neuron{20}{7483}{+} & $^+$the token "\{\{in\}\}" in various context... & $0.165$ & $-0.39\%$ & $-0.05\%$ \\
+\rowcolor{highcolor!26!white} \neuron{27}{6438}{+} & $^+$activation occurs on the token "and" and ... & $0.833$ & $0.39\%$ & $0.00\%$ \\
+\rowcolor{lowcolor!29!white} \neuron{19}{5170}{+} & $^+$negation or conditions such as unsure or ... & $0.131$ & $-0.30\%$ & $-0.02\%$ \\
+\rowcolor{lowcolor!25!white} \neuron{24}{7819}{+} & $^+$words related to heat or melting, especia... & $0.177$ & $-0.29\%$ & $-0.01\%$ \\
+\rowcolor{highcolor!26!white} \neuron{26}{10433}{-} & $^-$the token "been," the word "very," and th... & $0.833$ & $0.25\%$ & $0.00\%$ \\
+\rowcolor{lowcolor!24!white} \neuron{24}{2804}{-} & $^-$the word "like" or "for" following conver... & $0.199$ & $0.08\%$ & $0.35\%$ \\
+\rowcolor{highcolor!33!white} \neuron{21}{4920}{-} & $^-$activation occurs on the token "from" whe... & $0.923$ & $-0.04\%$ & $-1.86\%$ \\
+\rowcolor{lowcolor!24!white} \neuron{22}{2802}{+} & $^+$highlighting of terms related to potentia... & $0.189$ & $0.00\%$ & $0.45\%$ \\
+\midrule
+\multicolumn{5}{l}{\textbf{Target: slow}} \\
+\rowcolor{highcolor!40!white} \neuron{25}{7423}{+} & $^+$tokens "m[U+00E1]s" and "pi[U+00F9]" indi... & $1.000$ & $10.55\%$ & $0.05\%$ \\
+\rowcolor{lowcolor!40!white} \neuron{25}{6793}{+} & $^+$comparative expressions about speed or pa... & $0.000$ & $-3.67\%$ & $-0.03\%$ \\
+\rowcolor{highcolor!37!white} \neuron{24}{13094}{+} & $^+$comparative adjectives such as \{\{m[U+00... & $0.973$ & $2.55\%$ & $0.17\%$ \\
+\rowcolor{highcolor!40!white} \neuron{3}{738}{+} & $^+$tokens indicating a slow action or pace (... & $1.000$ & $1.65\%$ & $0.00\%$ \\
+\rowcolor{highcolor!34!white} \neuron{16}{8263}{-} & $^-$the word \{\{Fast\}\} or phrases indicati... & $0.936$ & $1.29\%$ & $0.19\%$ \\
+\rowcolor{highcolor!35!white} \neuron{14}{9193}{+} & $^+$the token "slow" and its variations (e.g.... & $0.944$ & $1.07\%$ & $0.00\%$ \\
+\rowcolor{highcolor!26!white} \neuron{29}{8749}{+} & $^+$words that denote the degree of compariso... & $0.833$ & $0.90\%$ & $0.00\%$ \\
+\rowcolor{lowcolor!35!white} \neuron{26}{4919}{+} & $^+$words indicating speed or quickness (e.g.... & $0.056$ & $-0.75\%$ & $0.00\%$ \\
+\rowcolor{highcolor!35!white} \neuron{23}{5561}{+} & $^+$phrases indicating a lack of hurry or ind... & $0.944$ & $0.63\%$ & $0.00\%$ \\
+\rowcolor{highcolor!26!white} \neuron{24}{4630}{-} & $^-$presence of a token indicating immediacy ... & $0.833$ & $0.62\%$ & $0.00\%$ \\
+\rowcolor{highcolor!31!white} \neuron{21}{8063}{-} & $^-$the word "the" when discussing speed or f... & $0.889$ & $0.39\%$ & $0.00\%$ \\
+\rowcolor{lowcolor!27!white} \neuron{22}{3698}{+} & $^+$comparative terms and evaluative triggers... & $0.151$ & $-0.36\%$ & $-0.04\%$ \\
+\midrule
+\multicolumn{5}{l}{\textbf{Target: small}} \\
+\rowcolor{lowcolor!26!white} \neuron{21}{4920}{-} & $^-$activation occurs on the token "from" whe... & $0.173$ & $-2.96\%$ & $-1.28\%$ \\
+\rowcolor{highcolor!40!white} \neuron{26}{2892}{-} & $^-$tokens indicating a specific or superlati... & $1.000$ & $2.84\%$ & $0.01\%$ \\
+\rowcolor{lowcolor!40!white} \neuron{29}{3261}{+} & $^+$occurrence of the word "all" or words ind... & $0.000$ & $-2.16\%$ & $0.00\%$ \\
+\rowcolor{highcolor!26!white} \neuron{25}{14237}{+} & $^+$the word "pi[U+00F9]" in an Italian conte... & $0.832$ & $1.55\%$ & $0.23\%$ \\
+\rowcolor{highcolor!30!white} \neuron{28}{2402}{-} & $^-$queries about size comparisons and enlarg... & $0.884$ & $1.28\%$ & $0.02\%$ \\
+\rowcolor{lowcolor!40!white} \neuron{27}{13928}{-} & $^-$Token "large"/"giant" following compariso... & $0.000$ & $-1.24\%$ & $0.00\%$ \\
+\rowcolor{lowcolor!25!white} \neuron{22}{4433}{+} & $^+$activation occurs on prepositions, conjun... & $0.185$ & $-0.82\%$ & $-0.35\%$ \\
+\rowcolor{highcolor!26!white} \neuron{14}{2801}{-} & $^-$tokens "largest," "biggest," "size," "sma... & $0.832$ & $0.75\%$ & $0.27\%$ \\
+\rowcolor{highcolor!31!white} \neuron{14}{8678}{-} & $^-$references to smallness or reduction (e.g... & $0.889$ & $0.56\%$ & $0.00\%$ \\
+\rowcolor{lowcolor!24!white} \neuron{17}{4188}{-} & $^-$the word "he" when followed by clauses, i... & $0.195$ & $-0.56\%$ & $-0.28\%$ \\
+\rowcolor{highcolor!30!white} \neuron{18}{12178}{-} & $^-$the token "a" and "or" trigger activation... & $0.886$ & $0.50\%$ & $0.01\%$ \\
+\rowcolor{highcolor!29!white} \neuron{17}{6931}{-} & $^-$the token "Small" when it is the only wor... & $0.864$ & $0.43\%$ & $0.03\%$ \\
+\rowcolor{highcolor!31!white} \neuron{22}{9062}{-} & $^-$activation on specific tokens (e.g., "as"... & $0.889$ & $0.36\%$ & $0.00\%$ \\
+\rowcolor{highcolor!31!white} \neuron{24}{9648}{+} & $^+$occurrences of non-English language phras... & $0.891$ & $-0.07\%$ & $-0.49\%$ \\
+\rowcolor{highcolor!26!white} \neuron{23}{7598}{-} & $^-$a specific token (or token sequence) that... & $0.827$ & $-0.04\%$ & $-0.59\%$ \\
+\rowcolor{lowcolor!25!white} \neuron{22}{929}{+} & $^+$colloquial use of "be" in contexts discus... & $0.178$ & $0.04\%$ & $0.49\%$ \\
+\rowcolor{highcolor!24!white} \neuron{19}{1691}{+} & $^+$tokens suggesting duality or contrast & $0.811$ & $0.00\%$ & $-0.43\%$ \\
+\bottomrule
+\end{longtable}
+\endgroup

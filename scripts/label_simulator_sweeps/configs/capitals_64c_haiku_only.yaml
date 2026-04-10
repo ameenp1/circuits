@@ -1,0 +1,13 @@
+# Capitals circuit: haiku-only sweep for minibatch contrib API labelling
+circuit_pickle: results/case_studies/capitals_circuit.pkl
+n_clusters: 64
+num_expl_samples: 5
+min_highlights: 4
+use_contrib_minibatch: true
+minibatch_contrib_prompt: true
+sorted_threshold: true
+verbose: true
+skip_attr: false
+
+models:
+  - claude-haiku-4-5-20251001

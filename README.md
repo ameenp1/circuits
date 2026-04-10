@@ -1,54 +1,351 @@
-# circuits
+<div align="center">
+  <h1 align="center">ADAG</h1>
+  <a href="https://arxiv.org/abs/2604.07615"><strong>Read our paper »</strong></a>
+</div>
+<br/>
 
-This repository hosts Transluce's circuit tracing codebase, as described in the [blogpost](https://transluce.org/neuron-circuits).
+**ADAG** (Automatically Describing Attribution Graphs) is Transluce's circuit tracing library, developed and maintained by [Aryaman Arora](https://aryaman.io/) and [Zhengxuan Wu](https://nlp.stanford.edu/~wuzhengx/index.html) (and, of course, [Claude Code](https://code.claude.com/docs/en/overview)). This library includes circuit tracing code for MLP neurons in Llama and Qwen-family Transformer LLMs, along with a whole analysis pipeline which automates circuit interpretation.
 
-## Installation
+The pipeline goes like this:
 
-First clone this repo:
+1. **Prepare a circuit** -- trace neuron attributions across a dataset
+2. **Cluster neurons** -- group neurons by their activation/contribution patterns
+3. **Generate descriptions** -- explain what each cluster does (input attribution + output contribution)
+4. **Summarize** -- produce short labels for each cluster
+5. **Analyze** -- steering, correlation, visualization
 
-```bash
-git clone https://github.com/TransluceAI/circuits.git
-```
+We also adapt the interactive frontend from [Decode Research's excellent `circuit-tracer` library](https://github.com/decoderesearch/circuit-tracer) to enable viewing of all this information. We explain how to do each step below, along with downstream analysis like steering.
 
-Then install the dependencies using `uv`:
+If you use this code, please cite:
 
-```bash
-uv sync
-```
-
-You must set environment variables in order to use some parts of the codebase. Copy the template file and fill in the missing values:
-
-```
-cp .env.template .env
-```
-
-## Codebase structure
-
-The main codebase is in the `circuits` directory. The `lib` directory contains shared libraries used by the codebase, which have been also used in prior releases by Transluce (e.g. [observatory](https://github.com/TransluceAI/observatory)).
-
-The following subdirectories live in `circuits`:
-
-- `clso`: Core implementation of gradient-based node attribution and edge weight tracing in our work. Also includes helpers for applying RelP and Integrated Gradients on arbitrary LMs.
-- `evals`: Evaluation code for the SVA benchmark, adapted from [Marks et al. (2024)](https://github.com/saprmarks/dictionary_learning). The evaluations in our blogpost can be replicated with this code.
-- `analysis`: Codebase for analysing and visualising circuits, taking in inputs from the algorithms implemented in `clso`. Includes utilities for feature scoring given hypotheses, clustering, and steering. All data is stored and processed as `pandas` dataframes.
-
-Additionally, `scripts` includes utilities for replicating our evaluations and case studies.
-
-## Example
-
-For an example of how to trace and save circuits over a dataset, see the `scripts/case_studies/math/math.py` script.
-
-## Citation
-
-If you use this codebase in your research, please cite [our blogpost](https://transluce.org/neuron-circuits):
-
-```
-@misc{arora2025language,
-  author       = {Arora, Aryaman and Wu, Zhengxuan and Steinhardt, Jacob and Schwettmann, Sarah},
-  title        = {Language Model Circuits are Sparse in the Neuron Basis},
-  year         = {2025},
-  month        = {November},
-  day          = {20},
-  howpublished = {\url{https://transluce.org/neuron-circuits}}
+```bibtex
+@article{arora2026sparse,
+    title={Language Model Circuits Are Sparse in the Neuron Basis},
+    author={Aryaman Arora and Zhengxuan Wu and Jacob Steinhardt and Sarah Schwettmann},
+    year={2026},
+    journal={arXiv:2601.22594},
+    url={https://arxiv.org/abs/2601.22594},
 }
+
+@article{arora2026adag,
+    title={ADAG: Automatically Describing Attribution Graphs},
+    author={Aryaman Arora and Zhengxuan Wu and Jacob Steinhardt and Sarah Schwettmann},
+    year={2026},
+    journal={arXiv:2604.07615},
+    url={https://arxiv.org/abs/2604.07615},
+}
+```
+
+## Quick Start
+
+```bash
+# Install dependencies
+uv sync
+
+# Copy and configure environment
+cp .env.template .env
+# Fill in API keys in .env
+
+# Trace a circuit from a config
+uv run python scripts/circuit_prep/prep.py --config configs/capitals.yaml
+
+# Or submit as a SLURM job
+sbatch --export=CONFIG=configs/capitals.yaml scripts/circuit_prep/prep.sbatch
+```
+
+## Pipeline Overview
+
+1. **Prepare a circuit** -- trace neuron attributions across a dataset
+2. **Cluster neurons** -- group neurons by their activation/contribution patterns
+3. **Generate descriptions** -- explain what each cluster does (input attribution + output contribution)
+4. **Summarize** -- produce short labels for each cluster
+5. **Analyze** -- steering, correlation, visualization
+
+## 1. Preparing a Circuit
+
+### Dataset format
+
+Create a Python module in `scripts/circuit_prep/data/` that exports:
+
+```python
+# scripts/circuit_prep/data/my_dataset.py
+prompts = ["What is the capital of Texas?", ...]
+seed_responses = ["Answer:"] * len(prompts)  # prefix for model response
+labels = [" Austin", ...]                    # target tokens to trace
+```
+
+For dynamic datasets that need model access, export a function instead:
+
+```python
+def get_dataset(model, tokenizer) -> tuple[list[str], list[str], list[str]]:
+    # ... generate prompts dynamically ...
+    return prompts, seed_responses, labels
+```
+
+### Config file
+
+```yaml
+# scripts/circuit_prep/configs/my_dataset.yaml
+dataset: my_dataset
+output_path: results/case_studies/output_circuit.pkl
+model-id: meta-llama/Llama-3.1-8B-Instruct
+percentage_threshold: 0.005  # attribution pruning cutoff
+batch_size: 4
+k: 5                        # top-k logits to trace
+apply-blacklist: true
+```
+
+### Tracing
+
+```bash
+# Single GPU
+uv run python scripts/circuit_prep/prep.py --config configs/my_dataset.yaml
+
+# Multi-GPU data parallelism (e.g. 4 GPUs, 1 per worker = 4 workers)
+sbatch --gres=gpu:4 --export=CONFIG=configs/my_dataset.yaml scripts/circuit_prep/prep.sbatch
+
+# Large model across 2 GPUs per copy (e.g. 8 GPUs = 4 workers)
+uv run python scripts/circuit_prep/prep.py --config configs/my_dataset.yaml --gpus-per-model 2
+```
+
+This produces a `CircuitData` pickle containing per-neuron attributions, activation maps, and edge
+weights.
+
+### Tracing API
+
+```python
+from circuits.tracing.trace import convert_inputs_to_circuits, CircuitData
+from circuits.tracing.clja import ADAGConfig
+
+config = ADAGConfig(
+    device="cuda:0",
+    percentage_threshold=0.005,
+    use_relp_grad=True,
+    apply_blacklist=True,
+    # ... see ADAGConfig for all options
+)
+
+data = convert_inputs_to_circuits(
+    model, tokenizer, prompts,
+    config=config,
+    seed_responses=seed_responses,
+    labels=labels,
+    batch_size=4,
+    k=5,
+)
+data.save_to_pickle("circuit.pkl")
+```
+
+## 2. Clustering
+
+Load the circuit and cluster neurons into interpretable groups:
+
+```python
+from circuits.analysis.circuit_ops import Circuit
+from transformers import AutoTokenizer
+
+c = Circuit.load_from_pickle("circuit.pkl")
+tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-3.1-8B-Instruct")
+c.set_tokenizer(tokenizer, num_layers=32)
+
+# Multi-view spectral clustering
+c.cluster_multiview(n_clusters=20, get_desc=True, combine="harmonic")
+
+# Save cluster assignments
+c.save_cluster_state("cluster_state.json")
+```
+
+To reload cluster assignments later:
+
+```python
+c = Circuit.load_from_pickle("circuit.pkl")
+c.set_tokenizer(tokenizer, num_layers=32)
+c.load_cluster_state("cluster_state.json")
+```
+
+## 3. Generating Descriptions
+
+Generate natural-language explanations for each cluster. There are two types:
+
+- **Attribution (attr)**: what input tokens cause this cluster to activate
+- **Contribution (contrib)**: what output tokens this cluster promotes/suppresses
+
+```python
+result = c.label_clusters_simulator_v2(
+    score_explanations=True,
+    num_expl_samples=5,
+    attr_backend="vllm",                       # local finetuned model (no refusals)
+    contrib_model_name="claude-haiku-4-5-20251001",
+    verbose=True,
+)
+attr_results, contrib_results, attr_exemplars, contrib_exemplars, cluster_to_neurons = result
+```
+
+**Important**: Use `attr_backend="vllm"` (not `"api"`) for attribution descriptions. The finetuned
+local model won't refuse on adversarial or safety-related content, whereas the Claude API may refuse
+to analyze jailbreak-style excerpts.
+
+This requires 2 GPUs: one for the vllm explainer/simulator, one for scoring.
+
+## 4. Summarizing Clusters
+
+Generate short (1--3 word) labels for each cluster:
+
+```python
+# Best results: attr + contrib descriptions only, no neuron descriptions
+labels = c.summarize_clusters(mode="rich", attr_only=True)
+
+# Full rich mode: attr + contrib + individual neuron descriptions
+c.fetch_descriptions()  # fetch per-neuron descriptions from database
+labels = c.summarize_clusters(mode="rich")
+
+# Include top dataset examples where cluster is most active
+labels = c.summarize_clusters(mode="batch", top_k_examples=10)
+
+# Save (labels are stored in cluster state)
+c.save_cluster_state("cluster_state.json")
+```
+
+`summarize_clusters()` uses `claude-opus-4-6` with adaptive thinking by default.
+
+| Mode | Description | Best for |
+|------|-------------|----------|
+| `mode="rich", attr_only=True` | Per-cluster API call with attr + contrib only | Task-specific circuits |
+| `mode="rich"` | Per-cluster with attr + contrib + neuron descriptions | General circuits |
+| `mode="rich", neurons_only=True` | Per-cluster with neuron descriptions only | When attr/contrib are missing |
+| `mode="batch"` | All clusters in one prompt | Quick/cheap labeling |
+
+There's also a standalone script:
+
+```bash
+uv run python scripts/case_studies/sensitivity_analysis/3b_summarize_clusters.py \
+    --mode rich --attr-only \
+    --circuit circuit.pkl --cluster-state cluster_state.json
+```
+
+## 5. Visualization
+
+### Circuit Tracer frontend
+
+The built-in web UI shows the full circuit interactively -- clusters, neurons, edges, token
+attributions, and descriptions. Uses the circuit-tracer frontend.
+
+```python
+# Serve directly (launches local HTTP server)
+c.serve(port=8032, slug="my_circuit")
+# Open http://localhost:8032/index.html?slug=my_circuit_0
+
+# Or export JSON files for hosting elsewhere
+c.export_to_circuit_tracer("output_dir/", slug="my_circuit")
+```
+
+### Circuit graph (Graphviz)
+
+For a static cluster-level graph of a single circuit instance:
+
+```bash
+uv run python scripts/case_studies/capitals/plot_circuit_graph.py circuit.pkl \
+    --label 0 --cluster-state cluster_state.json --dot-only
+dot -Tpdf circuit_graph.dot -o circuit_graph.pdf
+```
+
+## 6. Downstream Analysis
+
+### Steering
+
+Intervene on cluster activations and measure effects on model output:
+
+```python
+# Ablate a cluster (0x multiplier)
+diversity_stats, cluster_to_cluster, cluster_to_output = c.steer(
+    model, multiplier=0.0, store_results=True
+)
+
+# Amplify a cluster (2x multiplier)
+c.steer(model, multiplier=2.0, store_results=True)
+```
+
+For more controlled steering with ASR (attack success rate) measurement and LLM judging, see the
+sensitivity analysis scripts.
+
+### Correlation analysis
+
+Correlate cluster attribution with a metric (e.g., ASR) across circuit instances:
+
+```python
+from scipy import stats
+import numpy as np
+
+# Per-cluster: sum attribution across neurons, correlate with metric
+for cl, attr_vec in cluster_attr.items():
+    r, p = stats.pearsonr(attr_vec, metric_vec)
+```
+
+See `scripts/case_studies/sensitivity_analysis/3_describe_and_correlate.py` for a full example.
+
+## Case Studies
+
+| Directory | Description |
+|-----------|-------------|
+| `sensitivity_analysis/` | Medical safety jailbreak analysis on Llama-3.1-8B-Instruct |
+| `capitals/` | State capitals factual recall |
+| `capitals_qwen3/` | Capitals with Qwen3 |
+| `math/` | Arithmetic circuits |
+| `user_modelling/` | User behavior modeling |
+| `causalgym/` | CausalGym SVA evaluation |
+| `benchmark/` | Tracing throughput benchmarks |
+
+### Sensitivity analysis pipeline (numbered scripts)
+
+```
+1_serve.py                     Browse circuit interactively
+2_correlate_asr.py             Per-neuron attribution vs ASR correlation
+3_describe_and_correlate.py    Cluster, describe, correlate
+3b_summarize_clusters.py       Generate summary labels (standalone)
+4_steer_and_judge.py           Steer individual neurons, judge ASR
+5_steer_cluster_and_judge.py   Steer clusters, judge ASR
+6_sweep_clusters.py            Sweep all clusters (0x/2x), report ASR
+7_plot_asr_vs_attribution.py   Scatter plots
+8_make_steering_table.py       LaTeX table for paper
+```
+
+## Performance
+
+Benchmarked on H100 80GB with Llama-3.1-8B-Instruct (capitals, 50 prompts, k=5):
+
+| Batch Size | 1 GPU (s/prompt) | 2 GPU (s/prompt) | Peak GPU (1 GPU) |
+|------------|-----------------|-----------------|------------------|
+| 1 | 22.3 | 11.2 | 16.7 GB |
+| 2 | 13.7 | 7.1 | 17.7 GB |
+| **4** | **10.0** | **5.5** | **22.1 GB** |
+| 8 | 15.1 | 8.0 | 40.9 GB |
+
+Batch size 4 is optimal. Batch size 8 is slower due to memory pressure.
+
+Multi-GPU uses data parallelism: each GPU gets its own model copy and processes a shard of the
+dataset. For models that don't fit on a single GPU (e.g. Qwen3-32B), use `--gpus-per-model 2`.
+
+## Project Structure
+
+```
+circuits/
+  tracing/              Core tracing algorithm
+    trace.py            High-level API: convert_inputs_to_circuits()
+    clja.py             ADAGConfig, core jacobian attribution
+    attribution.py      Gradient attribution computation
+    grad/               Model-specific gradient wrappers (RelP, stop-grad)
+  analysis/
+    circuit_ops.py      Circuit class: clustering, labeling, steering, serving
+    steer.py            Activation steering implementation
+    label.py            Batch summarization
+  descriptions/         Description generation
+    label.py            Orchestration: generate + score explanations
+    prompts.py          All LLM prompts (attr, contrib, summary)
+    exemplars.py        Token highlighting and exemplar formatting
+    vllm_backend.py     Local finetuned explainer/simulator
+    api_backend.py      Anthropic API-based explainer
+  frontend/             Web UI for interactive circuit exploration
+scripts/
+  circuit_prep/         Dataset loading, config, tracing entry point
+  case_studies/         Per-task analysis scripts
 ```

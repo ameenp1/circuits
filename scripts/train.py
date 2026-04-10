@@ -14,7 +14,7 @@ from datetime import timedelta
 import torch
 import torch.distributed as dist
 from args.args import get_args, make_save_path, print_args
-from circuits.core.grad import revert_stop_nonlinear_grad_for_llama, stop_nonlinear_grad_for_llama
+from circuits.tracing.grad import revert_stop_nonlinear_grad, stop_nonlinear_grad
 from circuits.utils.constants import (
     DTYPE_MAPPING,
     INCLUDE_EMBED_MAPPING,
@@ -108,15 +108,13 @@ def main():
             tokenizer.pad_token = tokenizer.eos_token
             # core HF model has stop gradient replacement model
             try:
-                _ = revert_stop_nonlinear_grad_for_llama(model)
+                _ = revert_stop_nonlinear_grad(model)
             except Exception:
                 pass
-            model = stop_nonlinear_grad_for_llama(
+            model = stop_nonlinear_grad(
                 model,
-                args.use_shapley_grad,
-                args.use_shapley_qk,
-                args.use_relp_grad,
-                not args.disable_half_rule,
+                use_relp_grad=args.use_relp_grad,
+                use_half_rule=not args.disable_half_rule,
             )
 
             # wrap it as nnsight LanguageModel
@@ -221,8 +219,6 @@ def main():
         "suffix_length": args.suffix_length,
         "steps": args.steps,
         "use_transcoder": args.use_transcoder,
-        "use_shapley_grad": args.use_shapley_grad,
-        "use_shapley_qk": args.use_shapley_qk,
         "use_relp_grad": args.use_relp_grad,
         "use_stop_grad_on_mlps": args.use_stop_grad_on_mlps,
         "disable_stop_grad": args.disable_stop_grad,

@@ -6,8 +6,6 @@ import numpy as np
 import pandas as pd
 import pyvene as pv
 import torch
-from util.chat_input import IdsInput
-from util.subject import Subject
 
 ########################################################
 # Intervention utilities
@@ -219,8 +217,8 @@ def batchify(
 
 
 def prepare_circuits_for_interchange_interventions(
-    subject: Subject,
-    cis: list[IdsInput],
+    device: str | torch.device,
+    cis: list[list[int]],
     attention_masks: list[torch.Tensor],
     labels: list[str],
     df_node: pd.DataFrame,
@@ -232,7 +230,7 @@ def prepare_circuits_for_interchange_interventions(
     """
     Prepare pairs of circuits for interchange interventions. Assumes templatic prompts with overlapping tokens.
     """
-    device = str(subject.model.device)
+    device = str(device)
     pairs = []
     while len(pairs) < needed_pairs:
         base_idx = random.randint(0, len(cis) - 1)
@@ -247,11 +245,11 @@ def prepare_circuits_for_interchange_interventions(
             source_label = base_label
 
         base_input_ids, base_attention_mask = (
-            cis[base_idx].input_ids[::],
+            cis[base_idx][::],
             attention_masks[base_idx][::],
         )
         source_input_ids, source_attention_mask = (
-            cis[source_idx].input_ids[::],
+            cis[source_idx][::],
             attention_masks[source_idx][::],
         )
 

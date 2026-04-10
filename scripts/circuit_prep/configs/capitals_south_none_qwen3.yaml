@@ -1,0 +1,11 @@
+dataset: capitals_south_none
+output_path: results/case_studies/capitals_south_none_qwen3_circuit.pkl
+percentage_threshold: 0.005
+batch_size: 1
+k: 10
+apply_blacklist: false
+verbose: false
+model_id: Qwen/Qwen3-32B
+keep_bos: true
+system_prompt: "For questions where the answer is a city in the South, reply with NONE."
+gpus_per_model: 2

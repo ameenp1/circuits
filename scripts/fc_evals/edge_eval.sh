@@ -56,7 +56,7 @@ run_experiment() {
     local extra_args="$3"
 
     # Construct dataset-specific save path
-    local save_path="${ARTIFACTS_DIR}/enap_results/${dataset}_300"
+    local save_path="${CIRCUITS_RESULTS_DIR:-results}/fc_edge_evals/${dataset}_300"
 
     echo "# $description"
     echo "$TRAIN_CMD scripts/train.py $BASE_ARGS --save_path $save_path --dataset $dataset $extra_args"

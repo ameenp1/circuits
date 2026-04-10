@@ -225,7 +225,7 @@ class Subject:
         kwargs = {"dispatch": False, "device_map": "auto", "token": ENV.HF_TOKEN}
         kwargs.update({"torch_dtype": hf_config.torch_dtype} if cast_to_hf_config_dtype else {})  # type: ignore
         kwargs.update(nnsight_lm_kwargs)
-        # kwargs.update({"attn_implementation": "eager"})
+        kwargs.update({"attn_implementation": "eager"})
         if preloaded_model is None:
             self.model = LanguageModel(config.hf_model_id, **kwargs)
         else:

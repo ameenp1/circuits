@@ -1,10 +1,10 @@
 .env
 
-# data/
+# data/ (keep committed datasets, ignore generated data)
 notebooks/
-circuits/annotation/neurondb_distill/
-circuits/diffing/model_diffing/inoculation/datasets/subliminal/
-circuits/mib/
+results/
+logs/
+outputs/
 
 .DS_Store
 *.gz

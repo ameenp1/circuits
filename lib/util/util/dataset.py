@@ -1,11 +1,32 @@
-from typing import TYPE_CHECKING, Callable, List, Tuple, TypedDict
+from enum import Enum
+from typing import TYPE_CHECKING, Any, Callable, List, Tuple, TypedDict
 
 import datasets  # type: ignore
+from torch.utils.data import Dataset
 from util.chat_input import ModelInput
 
 # For type checking
 if TYPE_CHECKING:
     from util.subject import Subject
+
+
+class SimpleDataset(Dataset[Any]):
+    def __init__(self, data: list[Any]):
+        self.data = data
+
+    def __len__(self) -> int:
+        return len(self.data)
+
+    def __getitem__(self, index: Any) -> Any:
+        return self.data[index]
+
+
+class Split(str, Enum):
+    """The split of the dataset."""
+
+    TRAIN = "train"
+    VALID = "valid"
+    TEST = "test"
 
 
 class DatasetElement(TypedDict):

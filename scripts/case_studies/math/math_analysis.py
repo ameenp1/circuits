@@ -13,8 +13,8 @@ Usage:
 python math_analysis.py
 
 Output:
-- JSON files in $ARTIFACTS_DIR/math_circuit_hypotheses/
-- Plots in $ARTIFACTS_DIR/math_circuit_hypotheses/
+- JSON files in results/math_circuit_hypotheses/
+- Plots in results/math_circuit_hypotheses/
 """
 
 import json
@@ -27,16 +27,10 @@ import pandas as pd
 import plotnine as p9
 from circuits.analysis.circuit_ops import Circuit
 from circuits.analysis.cluster import NeuronId  # type: ignore
+from circuits.utils.constants import RESULTS_DIR
 from circuits.utils.descriptions import get_descriptions
 from tqdm import tqdm
 from util.subject import Subject, llama31_8B_instruct_config
-from pathlib import Path
-
-from env_util import ENV
-if ENV.ARTIFACTS_DIR is None:
-    raise RuntimeError("ARTIFACTS_DIR must be set in the .env file")
-
-ARTIFACTS_DIR = Path(ENV.ARTIFACTS_DIR) / "math_circuit_hypotheses"
 
 p9.theme_set(
     p9.theme_bw(base_size=10)
@@ -80,8 +74,9 @@ prompts = [f"What is {x} + {y}?" for x in range(100) for y in range(100)]
 seed_responses = ["Answer: "] * len(prompts)
 labels = [f"{x} + {y} = {x + y}" for x in range(100) for y in range(100)]
 
-RESULTS_DIR = ARTIFACTS_DIR / "case_studies" / "math"
-RESULTS_DIR.mkdir(parents=True, exist_ok=True)
+ARTIFACTS_DIR = Path("results/math_circuit_hypotheses")
+MATH_RESULTS_DIR = RESULTS_DIR / "case_studies/math"
+
 
 def _parse_input_variable(value: str) -> NeuronId:
     """
@@ -297,8 +292,9 @@ def plot_sum_mod_histograms(
         )
         + p9.geom_vline(xintercept=0.8, color="red", linetype="dashed")
     )
-    path = ARTIFACTS_DIR / "case_studies" / "math" / "sum_mod_histograms.png"
-    plot.save(path, dpi=300)
+    path = MATH_RESULTS_DIR / "sum_mod_histograms.pdf"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    plot.save(path)
 
 
 def export_sampled_node_subset(
@@ -415,24 +411,26 @@ def score_matrices(circuit: Circuit, experiment_name: str):
             ],
             output_name="scores_sum_tens.json",
         )
+    os.system("luce artifact upload aryaman/math_circuit_hypotheses --force")
 
 
 def main():
     # save experiments
-    math_circuit_path = ARTIFACTS_DIR / "case_studies" / "math_circuit.pkl"
-    circuit = Circuit.load_from_pickle(math_circuit_path)
+    circuit = Circuit.load_from_pickle(str(RESULTS_DIR / "case_studies/math_circuit.pkl"))
     circuit.set_subject(Subject(llama31_8B_instruct_config))
-    score_matrices(circuit, experiment_name="sum_mod_10")
+    # score_matrices(circuit, experiment_name="sum_mod_10")
     # export_hypothesis_score_jsons(circuit)
-    # plot_sum_mod_histograms(circuit)
+    plot_sum_mod_histograms(circuit)
 
-    # 36_plus_59_circuit_path = ARTIFACTS_DIR / "case_studies" / "36_plus_59_circuit.pkl"
-    # circuit = Circuit.load_from_pickle(36_plus_59_circuit_path)
+    # circuit = Circuit.load_from_pickle(
+    #     "results/case_studies/36_plus_59_circuit.pkl"
+    # )
     # circuit.set_subject(Subject(llama31_8B_instruct_config))
     # # export_score_data(circuit)
     # export_sampled_node_subset(
     #     circuit, num_labels=1, output_name="36_plus_59_nodes.json"
     # )
+    # os.system("luce artifact upload aryaman/math_circuit_hypotheses --force")
 
 
 if __name__ == "__main__":

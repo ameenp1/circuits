@@ -1,0 +1,187 @@
+% Requires: \usepackage[table]{xcolor}, \usepackage{longtable}, \usepackage{booktabs}
+\definecolor{highcolor}{HTML}{2166ac}
+\definecolor{lowcolor}{HTML}{b2182b}
+\begingroup\small
+\begin{longtable}{llrrr}
+\caption{Feature scores for language task.}
+\label{tab:language} \\
+\toprule
+Feature & Description & AUROC & In-class & Out-of-class \\
+\endhead
+\midrule
+\multicolumn{5}{l}{\textbf{Target: ar}} \\
+\rowcolor{highcolor!40!white} \neuron{31}{4787}{-} & $^-$activation on Arabic grammatical forms an... & $1.000$ & $9.42\%$ & $0.01\%$ \\
+\rowcolor{highcolor!40!white} \neuron{31}{280}{+} & $^+$tokens associated with question words and... & $1.000$ & $4.51\%$ & $0.00\%$ \\
+\rowcolor{highcolor!40!white} \neuron{27}{13732}{-} & $^-$Tokens highlighting relationships (e.g., ... & $1.000$ & $3.27\%$ & $0.00\%$ \\
+\rowcolor{highcolor!40!white} \neuron{31}{12172}{-} & $^-$activation occurs after Arabic tokens. & $1.000$ & $3.16\%$ & $0.00\%$ \\
+\rowcolor{lowcolor!36!white} \neuron{29}{2205}{-} & $^-$The neuron activates on the presence of c... & $0.045$ & $-3.00\%$ & $-0.54\%$ \\
+\rowcolor{highcolor!40!white} \neuron{24}{13320}{-} & $^-$the words "[AR:ALEF][AR:LAM][AR:TEH][AR:Y... & $1.000$ & $2.46\%$ & $0.00\%$ \\
+\rowcolor{lowcolor!40!white} \neuron{31}{747}{-} & $^-$Korean language grammatical structures or... & $0.000$ & $-2.44\%$ & $-0.13\%$ \\
+\rowcolor{highcolor!34!white} \neuron{4}{12934}{+} & $^+$proper nouns or brands indicated by speci... & $0.927$ & $2.37\%$ & $1.15\%$ \\
+\rowcolor{highcolor!37!white} \neuron{30}{11430}{-} & $^-$N.A. & $0.969$ & $1.76\%$ & $0.89\%$ \\
+\rowcolor{highcolor!40!white} \neuron{20}{7071}{-} & $^-$Arabic phrases, particularly those relate... & $1.000$ & $1.76\%$ & $0.00\%$ \\
+\rowcolor{lowcolor!40!white} \neuron{30}{13513}{+} & $^+$activation occurs primarily with tokens i... & $0.000$ & $-1.62\%$ & $0.00\%$ \\
+\rowcolor{lowcolor!33!white} \neuron{30}{6707}{-} & $^-$tokens related to "[CYR:O][CYR:EN][CYR:EL... & $0.080$ & $-1.55\%$ & $-0.29\%$ \\
+\rowcolor{highcolor!32!white} \neuron{24}{9183}{+} & $^+$activation occurs on connectors like \{\{... & $0.910$ & $1.55\%$ & $0.55\%$ \\
+\rowcolor{lowcolor!32!white} \neuron{31}{8309}{-} & $^-$miscellaneous Arabic words and phrases & $0.094$ & $-1.38\%$ & $-0.08\%$ \\
+\rowcolor{highcolor!32!white} \neuron{4}{12458}{-} & $^-$text containing a colon (\{\{:\}\}) & $0.906$ & $1.29\%$ & $0.94\%$ \\
+\rowcolor{lowcolor!40!white} \neuron{31}{10275}{-} & $^-$Greek tokens with certain vowel combinati... & $0.000$ & $-1.28\%$ & $0.02\%$ \\
+\rowcolor{highcolor!40!white} \neuron{30}{10044}{-} & $^-$presence of Arabic tokens that reflect a ... & $1.000$ & $1.17\%$ & $0.00\%$ \\
+\rowcolor{highcolor!33!white} \neuron{31}{3923}{+} & $^+$Arabic text; often involves instructional... & $0.917$ & $1.13\%$ & $0.00\%$ \\
+\rowcolor{highcolor!40!white} \neuron{29}{11490}{-} & $^-$conjunctions and phrases indicating compa... & $1.000$ & $1.09\%$ & $0.03\%$ \\
+\rowcolor{highcolor!33!white} \neuron{31}{4130}{+} & $^+$activation following certain Arabic token... & $0.917$ & $1.08\%$ & $0.00\%$ \\
+\midrule
+\multicolumn{5}{l}{\textbf{Target: de}} \\
+\rowcolor{highcolor!40!white} \neuron{31}{1000}{-} & $^-$French or German phrases with hints of co... & $1.000$ & $4.54\%$ & $0.00\%$ \\
+\rowcolor{highcolor!35!white} \neuron{0}{11311}{-} & $^-$instances of "\{\{user\}\}", mainly in co... & $0.948$ & $2.21\%$ & $1.19\%$ \\
+\rowcolor{lowcolor!40!white} \neuron{30}{7745}{+} & $^+$usage of "um" or "ich" in various context... & $0.000$ & $-1.60\%$ & $0.00\%$ \\
+\rowcolor{highcolor!40!white} \neuron{24}{6638}{-} & $^-$Dutch articles, conjunctions, and demonst... & $1.000$ & $1.49\%$ & $0.00\%$ \\
+\rowcolor{highcolor!36!white} \neuron{29}{3490}{-} & $^-$activation occurs when a word signifies t... & $0.962$ & $1.24\%$ & $0.13\%$ \\
+\rowcolor{highcolor!39!white} \neuron{23}{1423}{+} & $^+$conjunctions like \{\{und\}\} (and) and \... & $0.993$ & $1.23\%$ & $0.25\%$ \\
+\rowcolor{highcolor!33!white} \neuron{29}{1884}{+} & $^+$activation occurs primarily on punctuatio... & $0.917$ & $0.98\%$ & $0.00\%$ \\
+\rowcolor{highcolor!39!white} \neuron{14}{4513}{-} & $^-$responses indicating inability to perform... & $0.997$ & $0.96\%$ & $0.10\%$ \\
+\rowcolor{highcolor!39!white} \neuron{4}{12353}{-} & $^-$phrases indicating a response of "yes" or... & $0.993$ & $0.90\%$ & $0.22\%$ \\
+\rowcolor{highcolor!40!white} \neuron{0}{1050}{+} & $^+$occurrences of "\{\{Ant\}\}" in various c... & $1.000$ & $0.86\%$ & $0.00\%$ \\
+\rowcolor{lowcolor!40!white} \neuron{13}{4776}{-} & $^-$the conjunction "e" or similar connecting... & $0.000$ & $-0.79\%$ & $-0.11\%$ \\
+\rowcolor{lowcolor!36!white} \neuron{21}{11206}{+} & $^+$user queries for summaries, rejections, o... & $0.045$ & $-0.71\%$ & $-0.12\%$ \\
+\rowcolor{highcolor!37!white} \neuron{29}{11794}{-} & $^-$tokens indicating object relations or gra... & $0.972$ & $0.65\%$ & $0.14\%$ \\
+\rowcolor{highcolor!39!white} \neuron{12}{12356}{+} & $^+$translations into or out of Arabic and Po... & $0.990$ & $0.58\%$ & $-0.02\%$ \\
+\rowcolor{lowcolor!39!white} \neuron{10}{9553}{+} & $^+$tokens related to "download," "slot equip... & $0.003$ & $-0.56\%$ & $-0.03\%$ \\
+\rowcolor{highcolor!33!white} \neuron{21}{5154}{-} & $^-$tokens "something" and "distinctly" in va... & $0.915$ & $0.54\%$ & $0.01\%$ \\
+\rowcolor{lowcolor!32!white} \neuron{15}{1016}{+} & $^+$The neuron activates on the token delimit... & $0.092$ & $-0.47\%$ & $-0.03\%$ \\
+\midrule
+\multicolumn{5}{l}{\textbf{Target: en}} \\
+\rowcolor{lowcolor!40!white} \neuron{12}{8459}{-} & $^-$responses to inquiries about word associa... & $0.000$ & $-4.63\%$ & $-1.78\%$ \\
+\rowcolor{lowcolor!35!white} \neuron{8}{10006}{-} & $^-$group \{\{of\}\}; the pattern "called" re... & $0.056$ & $-3.24\%$ & $-1.08\%$ \\
+\rowcolor{highcolor!40!white} \neuron{0}{2765}{-} & $^-$tokens corresponding to "Answer" in vario... & $1.000$ & $2.59\%$ & $0.07\%$ \\
+\rowcolor{highcolor!37!white} \neuron{29}{12010}{-} & $^-$Names, articles, or references with forma... & $0.969$ & $2.42\%$ & $0.38\%$ \\
+\rowcolor{highcolor!36!white} \neuron{15}{11853}{+} & $^+$response with \{\{No\}\} or \{\{'m\}\} (I... & $0.951$ & $2.15\%$ & $1.30\%$ \\
+\rowcolor{highcolor!40!white} \neuron{15}{1816}{-} & $^-$tokens that follow a specific format or c... & $1.000$ & $1.83\%$ & $0.05\%$ \\
+\rowcolor{lowcolor!33!white} \neuron{29}{3490}{+} & $^+$tokens like "cho," "[CJK]," and "[CJK]" i... & $0.076$ & $-1.81\%$ & $-0.29\%$ \\
+\rowcolor{highcolor!40!white} \neuron{31}{13336}{-} & $^-$references to specific numerical IDs, mon... & $1.000$ & $1.81\%$ & $0.18\%$ \\
+\rowcolor{lowcolor!40!white} \neuron{12}{14160}{+} & $^+$usage of ampersand \{\{\&\}\}, commas bef... & $0.000$ & $-1.79\%$ & $-0.22\%$ \\
+\rowcolor{highcolor!36!white} \neuron{21}{5779}{-} & $^-$presence of "a" or "those" before tokens ... & $0.951$ & $1.65\%$ & $1.33\%$ \\
+\rowcolor{lowcolor!40!white} \neuron{25}{11584}{+} & $^+$activating words that indicate a type or ... & $0.000$ & $-1.62\%$ & $-0.09\%$ \\
+\rowcolor{highcolor!40!white} \neuron{13}{9823}{+} & $^+$the word "that" in definitions and explan... & $1.000$ & $1.57\%$ & $0.28\%$ \\
+\rowcolor{lowcolor!40!white} \neuron{15}{1101}{-} & $^-$presence of specific tokens like \{\{*\}\... & $0.000$ & $-1.42\%$ & $0.00\%$ \\
+\rowcolor{highcolor!40!white} \neuron{12}{5697}{+} & $^+$occurrences of the token "to" when preced... & $1.000$ & $1.38\%$ & $0.01\%$ \\
+\rowcolor{lowcolor!40!white} \neuron{21}{4722}{+} & $^+$activating tokens related to comparative ... & $0.000$ & $-1.33\%$ & $-0.11\%$ \\
+\rowcolor{lowcolor!40!white} \neuron{13}{9720}{+} & $^+$words that imply a certain quality or sta... & $0.000$ & $-1.32\%$ & $0.00\%$ \\
+\rowcolor{highcolor!40!white} \neuron{19}{464}{-} & $^-$phrases indicating actions or characteris... & $1.000$ & $1.25\%$ & $0.88\%$ \\
+\rowcolor{highcolor!40!white} \neuron{30}{936}{-} & $^-$specific numerical patterns (e.g., EAN or... & $1.000$ & $1.23\%$ & $0.00\%$ \\
+\rowcolor{lowcolor!33!white} \neuron{8}{1789}{+} & $^+$space and formatting characters (e.g., "[... & $0.087$ & $-1.11\%$ & $-0.79\%$ \\
+\rowcolor{lowcolor!40!white} \neuron{12}{10867}{+} & $^+$tokens indicating ethical constraints and... & $0.000$ & $-1.08\%$ & $-0.09\%$ \\
+\midrule
+\multicolumn{5}{l}{\textbf{Target: es}} \\
+\rowcolor{highcolor!35!white} \neuron{31}{9968}{+} & $^+$extraction of specific information or req... & $0.944$ & $1.54\%$ & $0.16\%$ \\
+\rowcolor{highcolor!37!white} \neuron{31}{11229}{+} & $^+$conjunctions (e, e para) in academic or i... & $0.965$ & $1.45\%$ & $0.15\%$ \\
+\rowcolor{highcolor!34!white} \neuron{28}{5596}{+} & $^+$presence of defined concepts or terms rel... & $0.927$ & $1.35\%$ & $0.32\%$ \\
+\rowcolor{highcolor!33!white} \neuron{30}{8299}{-} & $^-$activation occurs on conjunctions and pre... & $0.917$ & $1.34\%$ & $0.00\%$ \\
+\rowcolor{highcolor!37!white} \neuron{29}{7941}{+} & $^+$chemistry terms with varying parenthetica... & $0.969$ & $1.07\%$ & $0.23\%$ \\
+\rowcolor{highcolor!40!white} \neuron{12}{7597}{-} & $^-$tokens indicating mathematical or coding ... & $1.000$ & $0.96\%$ & $0.09\%$ \\
+\rowcolor{highcolor!40!white} \neuron{10}{1648}{-} & $^-$the use of the token \{\{.\}\} at the end... & $1.000$ & $0.92\%$ & $0.04\%$ \\
+\rowcolor{lowcolor!36!white} \neuron{10}{6962}{-} & $^-$highlighting of specific affirmative or c... & $0.045$ & $-0.89\%$ & $-0.05\%$ \\
+\rowcolor{highcolor!38!white} \neuron{0}{4686}{+} & $^+$activation occurs on the token format `\{... & $0.983$ & $0.87\%$ & $0.09\%$ \\
+\rowcolor{lowcolor!40!white} \neuron{10}{10534}{-} & $^-$tokens with specific accented characters ... & $0.000$ & $-0.79\%$ & $0.00\%$ \\
+\rowcolor{highcolor!37!white} \neuron{10}{14114}{-} & $^-$references to equivalence or corresponden... & $0.969$ & $0.77\%$ & $0.10\%$ \\
+\rowcolor{highcolor!33!white} \neuron{31}{11267}{-} & $^-$the activation of the neuron occurs on to... & $0.917$ & $0.72\%$ & $0.00\%$ \\
+\rowcolor{lowcolor!38!white} \neuron{13}{1134}{-} & $^-$mentions of "Anth" or forms of "we/us" (\... & $0.014$ & $-0.71\%$ & $-0.07\%$ \\
+\rowcolor{highcolor!32!white} \neuron{17}{14096}{-} & $^-$presence of specific nouns related to mea... & $0.903$ & $0.66\%$ & $0.13\%$ \\
+\rowcolor{highcolor!40!white} \neuron{9}{10339}{-} & $^-$specific terms or tokens that reference a... & $1.000$ & $0.65\%$ & $0.00\%$ \\
+\rowcolor{highcolor!40!white} \neuron{10}{191}{+} & $^+$abrupts or irrelevant jumps from topic to... & $1.000$ & $0.59\%$ & $0.00\%$ \\
+\rowcolor{highcolor!40!white} \neuron{1}{7598}{+} & $^+$phrases "the point \{\{being\}\}", "the g... & $1.000$ & $0.58\%$ & $0.00\%$ \\
+\rowcolor{highcolor!33!white} \neuron{5}{12754}{+} & $^+$Activation occurs on affirmations or nega... & $0.917$ & $0.47\%$ & $0.00\%$ \\
+\midrule
+\multicolumn{5}{l}{\textbf{Target: fr}} \\
+\rowcolor{highcolor!40!white} \neuron{26}{808}{-} & $^-$French connectors or conjunctions like \{... & $1.000$ & $3.19\%$ & $0.00\%$ \\
+\rowcolor{highcolor!40!white} \neuron{31}{5283}{+} & $^+$introduction of a descriptor or explanati... & $1.000$ & $2.87\%$ & $0.00\%$ \\
+\rowcolor{highcolor!37!white} \neuron{5}{2898}{+} & $^+$a tokenized structure starting with an op... & $0.969$ & $0.96\%$ & $0.73\%$ \\
+\rowcolor{lowcolor!38!white} \neuron{5}{919}{+} & $^+$words containing repeated letters or spec... & $0.017$ & $-0.87\%$ & $-0.03\%$ \\
+\rowcolor{lowcolor!33!white} \neuron{23}{5245}{-} & $^-$French tokens indicating possession or in... & $0.083$ & $-0.71\%$ & $0.00\%$ \\
+\rowcolor{lowcolor!33!white} \neuron{1}{3234}{-} & $^-$usage of the token "\{\{:\}\}" to indicat... & $0.083$ & $0.70\%$ & $0.91\%$ \\
+\rowcolor{highcolor!40!white} \neuron{0}{5805}{-} & $^-$occurrences of \{\{=\}\} or \{\{:\}\} ind... & $1.000$ & $0.64\%$ & $0.00\%$ \\
+\rowcolor{highcolor!40!white} \neuron{0}{10902}{-} & $^-$token "\{\{<|start\_header\_id|>\}\}" in ... & $1.000$ & $0.62\%$ & $-0.04\%$ \\
+\rowcolor{lowcolor!40!white} \neuron{9}{7246}{+} & $^+$the token "you" preceded by a context imp... & $0.000$ & $-0.61\%$ & $-0.01\%$ \\
+\rowcolor{lowcolor!33!white} \neuron{21}{8322}{+} & $^+$activating token "env", "que", "sous", an... & $0.083$ & $-0.53\%$ & $0.00\%$ \\
+\rowcolor{highcolor!33!white} \neuron{31}{8152}{-} & $^-$presence of specific terms related to tec... & $0.917$ & $0.50\%$ & $0.00\%$ \\
+\midrule
+\multicolumn{5}{l}{\textbf{Target: hi}} \\
+\rowcolor{highcolor!40!white} \neuron{31}{742}{-} & $^-$hindi tokens involving conjunctions and s... & $1.000$ & $24.13\%$ & $0.00\%$ \\
+\rowcolor{lowcolor!40!white} \neuron{31}{8104}{+} & $^+$Hindi phrases and prompts for writing poe... & $0.000$ & $-3.52\%$ & $0.00\%$ \\
+\rowcolor{lowcolor!32!white} \neuron{30}{3382}{+} & $^+$common contextual words or phrases before... & $0.094$ & $-3.34\%$ & $-0.98\%$ \\
+\rowcolor{lowcolor!40!white} \neuron{29}{12010}{-} & $^-$Names, articles, or references with forma... & $0.000$ & $-3.00\%$ & $1.06\%$ \\
+\rowcolor{highcolor!40!white} \neuron{31}{11558}{-} & $^-$tokens that initiate a new line or stanza... & $1.000$ & $2.60\%$ & $0.00\%$ \\
+\rowcolor{highcolor!40!white} \neuron{8}{11999}{+} & $^+$names with specific endings like -berg, -... & $1.000$ & $1.68\%$ & $0.00\%$ \\
+\rowcolor{highcolor!40!white} \neuron{3}{9171}{+} & $^+$the letter "A" as an abbreviation for "an... & $1.000$ & $1.66\%$ & $0.20\%$ \\
+\rowcolor{lowcolor!36!white} \neuron{27}{8140}{-} & $^-$words like "meeste", "tienen", "die" that... & $0.045$ & $-1.64\%$ & $-0.02\%$ \\
+\rowcolor{lowcolor!40!white} \neuron{5}{8064}{+} & $^+$tokens related to "sales" and "Medicare" ... & $0.000$ & $-1.63\%$ & $0.00\%$ \\
+\rowcolor{lowcolor!36!white} \neuron{30}{6707}{-} & $^-$tokens related to "[CYR:O][CYR:EN][CYR:EL... & $0.045$ & $-1.62\%$ & $-0.28\%$ \\
+\rowcolor{highcolor!40!white} \neuron{21}{5178}{-} & $^-$presence of the Hindi tokens for "ham", "... & $1.000$ & $1.50\%$ & $0.00\%$ \\
+\rowcolor{highcolor!40!white} \neuron{27}{9595}{+} & $^+$activation on specific word forms in Sout... & $1.000$ & $1.37\%$ & $0.00\%$ \\
+\rowcolor{lowcolor!38!white} \neuron{28}{1945}{-} & $^-$activation occurs with conjunctions and c... & $0.017$ & $-1.34\%$ & $-0.16\%$ \\
+\rowcolor{lowcolor!33!white} \neuron{30}{6764}{-} & $^-$presence of a string of characters with f... & $0.083$ & $-1.28\%$ & $0.00\%$ \\
+\rowcolor{lowcolor!40!white} \neuron{30}{2220}{+} & $^+$presence of characters from the Japanese ... & $0.000$ & $-1.10\%$ & $0.00\%$ \\
+\rowcolor{highcolor!33!white} \neuron{2}{4313}{+} & $^+$activations on variations of "anser" show... & $0.924$ & $1.08\%$ & $0.50\%$ \\
+\rowcolor{lowcolor!37!white} \neuron{29}{10856}{-} & $^-$Neuron activates on the presence of suita... & $0.035$ & $-1.00\%$ & $-0.08\%$ \\
+\rowcolor{highcolor!35!white} \neuron{0}{7433}{+} & $^+$opening curly brace '\{\{' & $0.938$ & $0.95\%$ & $0.21\%$ \\
+\rowcolor{highcolor!40!white} \neuron{15}{4528}{-} & $^-$activation on tokens related to user quer... & $1.000$ & $0.90\%$ & $0.00\%$ \\
+\rowcolor{highcolor!33!white} \neuron{19}{8664}{+} & $^+$context featuring social dynamics, person... & $0.924$ & $-0.88\%$ & $-1.54\%$ \\
+\midrule
+\multicolumn{5}{l}{\textbf{Target: it}} \\
+\rowcolor{highcolor!40!white} \neuron{27}{8557}{-} & $^-$copulas and auxiliary verbs ([U+00E8], so... & $1.000$ & $2.15\%$ & $0.00\%$ \\
+\rowcolor{lowcolor!40!white} \neuron{1}{2427}{+} & $^+$partial URL tokens or incomplete words, o... & $0.000$ & $-1.73\%$ & $-0.34\%$ \\
+\rowcolor{highcolor!32!white} \neuron{31}{11229}{+} & $^+$conjunctions (e, e para) in academic or i... & $0.910$ & $1.23\%$ & $0.18\%$ \\
+\rowcolor{lowcolor!40!white} \neuron{23}{6734}{-} & $^-$activation occurs on the Italian token "c... & $0.000$ & $-1.16\%$ & $0.00\%$ \\
+\rowcolor{highcolor!37!white} \neuron{23}{11405}{-} & $^-$Month names within a specific context (of... & $0.969$ & $1.07\%$ & $0.41\%$ \\
+\rowcolor{highcolor!33!white} \neuron{1}{3234}{-} & $^-$usage of the token "\{\{:\}\}" to indicat... & $0.924$ & $1.06\%$ & $0.87\%$ \\
+\rowcolor{highcolor!40!white} \neuron{1}{198}{-} & $^-$system instruction/configuration text & $1.000$ & $0.80\%$ & $0.00\%$ \\
+\rowcolor{lowcolor!37!white} \neuron{9}{470}{-} & $^-$keywords related to a specific identity o... & $0.031$ & $-0.78\%$ & $-0.34\%$ \\
+\rowcolor{highcolor!33!white} \neuron{31}{3561}{-} & $^-$verbs like \{\{usar\}\}, \{\{ar\}\} (from... & $0.917$ & $0.60\%$ & $0.00\%$ \\
+\rowcolor{lowcolor!40!white} \neuron{5}{13635}{-} & $^-$followed by a colon \{\{:\}\} and often i... & $0.000$ & $0.00\%$ & $0.67\%$ \\
+\midrule
+\multicolumn{5}{l}{\textbf{Target: ru}} \\
+\rowcolor{highcolor!40!white} \neuron{31}{7925}{-} & $^-$activation occurs on the pattern of a tok... & $1.000$ & $3.45\%$ & $0.00\%$ \\
+\rowcolor{highcolor!40!white} \neuron{31}{8180}{-} & $^-$activation occurs on tokens that are non-... & $1.000$ & $3.26\%$ & $0.00\%$ \\
+\rowcolor{highcolor!40!white} \neuron{31}{9792}{+} & $^+$poor grammar, typographical errors, nonse... & $1.000$ & $2.73\%$ & $0.00\%$ \\
+\rowcolor{lowcolor!40!white} \neuron{30}{10747}{-} & $^-$brief summaries or explanations, often in... & $0.000$ & $-2.37\%$ & $0.00\%$ \\
+\rowcolor{highcolor!40!white} \neuron{30}{13605}{-} & $^-$occurrence of Russian tokens related to c... & $1.000$ & $2.36\%$ & $0.00\%$ \\
+\rowcolor{highcolor!40!white} \neuron{31}{13501}{-} & $^-$conjunctions (e.g. "[CYR:I]", "[CYR:CHE][... & $1.000$ & $2.18\%$ & $0.00\%$ \\
+\rowcolor{highcolor!38!white} \neuron{7}{2742}{-} & $^-$presence of tokens like "Dur\{\{ante\}\}"... & $0.986$ & $2.16\%$ & $0.49\%$ \\
+\rowcolor{highcolor!38!white} \neuron{31}{5565}{-} & $^-$activation on \{\{"\}\} following a comma... & $0.986$ & $2.07\%$ & $0.42\%$ \\
+\rowcolor{lowcolor!35!white} \neuron{3}{6390}{-} & $^-$specific tokens containing words related ... & $0.059$ & $2.04\%$ & $3.85\%$ \\
+\rowcolor{lowcolor!38!white} \neuron{23}{12573}{-} & $^-$emphasizes the definite article or the pr... & $0.021$ & $-1.98\%$ & $-0.68\%$ \\
+\rowcolor{lowcolor!33!white} \neuron{31}{10131}{+} & $^+$occurrence of the Cyrillic letters \{\{[C... & $0.083$ & $-1.90\%$ & $0.00\%$ \\
+\rowcolor{highcolor!40!white} \neuron{24}{6445}{-} & $^-$tokens "w" and "," followed by grammatica... & $1.000$ & $1.74\%$ & $0.00\%$ \\
+\rowcolor{lowcolor!39!white} \neuron{29}{13810}{+} & $^+$presence of specific attributes (e.g., 'g... & $0.010$ & $-1.70\%$ & $-0.55\%$ \\
+\rowcolor{lowcolor!40!white} \neuron{30}{3745}{-} & $^-$activation occurs after sentences or phra... & $0.000$ & $-1.65\%$ & $0.00\%$ \\
+\rowcolor{highcolor!38!white} \neuron{21}{4786}{-} & $^-$activating phrases contain \{\{(\}\}, \{\... & $0.976$ & $1.62\%$ & $0.24\%$ \\
+\rowcolor{highcolor!40!white} \neuron{24}{7999}{-} & $^-$presence of a function indicated by \{\{(... & $1.000$ & $1.52\%$ & $0.00\%$ \\
+\rowcolor{highcolor!38!white} \neuron{31}{311}{-} & $^-$presence of punctuation or special charac... & $0.983$ & $1.43\%$ & $0.43\%$ \\
+\rowcolor{highcolor!40!white} \neuron{27}{9311}{-} & $^-$the presence of words like "[CYR:KA][CYR:... & $1.000$ & $1.42\%$ & $0.00\%$ \\
+\rowcolor{lowcolor!36!white} \neuron{30}{936}{+} & $^+$phrases starting with "here are" and spec... & $0.038$ & $-1.42\%$ & $-0.16\%$ \\
+\rowcolor{highcolor!40!white} \neuron{31}{2213}{-} & $^-$the presence of additional or unexpected ... & $1.000$ & $1.25\%$ & $0.00\%$ \\
+\midrule
+\multicolumn{5}{l}{\textbf{Target: zh}} \\
+\rowcolor{highcolor!40!white} \neuron{31}{8258}{+} & $^+$the presence of specific Chinese characte... & $1.000$ & $3.00\%$ & $0.00\%$ \\
+\rowcolor{highcolor!36!white} \neuron{0}{12829}{+} & $^+$activation occurs on specific tokens that... & $0.958$ & $2.45\%$ & $0.72\%$ \\
+\rowcolor{highcolor!40!white} \neuron{31}{4198}{-} & $^-$presence of the token "pij" related to pa... & $1.000$ & $2.35\%$ & $0.01\%$ \\
+\rowcolor{highcolor!33!white} \neuron{2}{12721}{+} & $^+$translation or inquiry involving Chinese ... & $0.917$ & $2.22\%$ & $0.00\%$ \\
+\rowcolor{lowcolor!40!white} \neuron{31}{8959}{+} & $^+$presence of specific contextual words (e.... & $0.000$ & $-2.22\%$ & $0.00\%$ \\
+\rowcolor{lowcolor!35!white} \neuron{29}{2007}{+} & $^+$presence of non-English tokens (e.g., "su... & $0.062$ & $-2.19\%$ & $-0.91\%$ \\
+\rowcolor{lowcolor!36!white} \neuron{29}{3490}{+} & $^+$tokens like "cho," "[CJK]," and "[CJK]" i... & $0.049$ & $-2.01\%$ & $-0.27\%$ \\
+\rowcolor{highcolor!40!white} \neuron{0}{10772}{+} & $^+$Chinese interrogative phrases starting wi... & $1.000$ & $1.68\%$ & $0.00\%$ \\
+\rowcolor{lowcolor!35!white} \neuron{18}{9669}{+} & $^+$questions about Vietnamese language compr... & $0.059$ & $-1.67\%$ & $-0.59\%$ \\
+\rowcolor{highcolor!40!white} \neuron{31}{11489}{+} & $^+$presence of characters indicative of Chin... & $1.000$ & $1.60\%$ & $0.00\%$ \\
+\rowcolor{highcolor!40!white} \neuron{30}{8350}{-} & $^-$repeated phrases with certain keywords li... & $1.000$ & $1.59\%$ & $0.00\%$ \\
+\rowcolor{highcolor!40!white} \neuron{31}{8236}{+} & $^+$activation occurs on tokens that follow s... & $1.000$ & $1.38\%$ & $0.00\%$ \\
+\rowcolor{highcolor!40!white} \neuron{1}{11008}{-} & $^-$Chinese characters, particularly \{\{[CJK... & $1.000$ & $1.31\%$ & $0.00\%$ \\
+\rowcolor{lowcolor!40!white} \neuron{30}{255}{+} & $^+$Japanese and Chinese dialogue, activating... & $0.000$ & $-1.26\%$ & $0.00\%$ \\
+\rowcolor{highcolor!37!white} \neuron{3}{10591}{-} & $^-$mentions of command line syntax or specia... & $0.972$ & $1.20\%$ & $0.80\%$ \\
+\rowcolor{highcolor!32!white} \neuron{31}{1443}{+} & $^+$the presence of specific terms related to... & $0.911$ & $1.06\%$ & $0.01\%$ \\
+\rowcolor{lowcolor!32!white} \neuron{22}{4433}{+} & $^+$activation occurs on prepositions, conjun... & $0.097$ & $-0.98\%$ & $-0.24\%$ \\
+\rowcolor{highcolor!40!white} \neuron{0}{5936}{+} & $^+$repeated token "[CJK][CJK]" & $1.000$ & $0.97\%$ & $0.00\%$ \\
+\rowcolor{highcolor!39!white} \neuron{31}{10233}{+} & $^+$activation occurs on single Chinese chara... & $0.993$ & $0.96\%$ & $0.03\%$ \\
+\rowcolor{highcolor!39!white} \neuron{31}{3583}{-} & $^-$the presence of commas in citation format... & $0.997$ & $0.94\%$ & $0.10\%$ \\
+\bottomrule
+\end{longtable}
+\endgroup

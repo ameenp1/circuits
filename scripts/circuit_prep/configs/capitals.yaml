@@ -1,0 +1,8 @@
+# Capitals circuit preparation
+dataset: capitals
+output_path: results/case_studies/capitals_circuit.pkl
+percentage_threshold: 0.005
+batch_size: 4
+k: 5
+apply_blacklist: true
+verbose: false

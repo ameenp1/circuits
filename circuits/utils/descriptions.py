@@ -1,5 +1,6 @@
 import glob
 import json
+import os
 import time
 from concurrent.futures import ThreadPoolExecutor
 from functools import partial
@@ -7,27 +8,34 @@ from typing import cast
 
 import numpy as np
 import pandas as pd
-from neurondb.filters import Neuron, NeuronPolarity, SQLANeuron, SQLANeuronDescription
-from neurondb.postgres import DBManager, sqla_and_
 from tqdm import tqdm
 
-from env_util import ENV
-
-# set up db
 try:
-    db = DBManager.get_instance("neurons_vincent")
-except Exception as e:
-    print(f"Error getting DBManager instance: {e}")
-    db = None
+    from neurondb.filters import Neuron, NeuronPolarity, SQLANeuron, SQLANeuronDescription
+    from neurondb.postgres import DBManager, sqla_and_
+except ImportError:
+    DBManager = None  # type: ignore[assignment,misc]
+
+# Lazy DB connection — only connect on first use, not on import
+_db = None
+_db_initialized = False
+
+
+def _get_db():
+    global _db, _db_initialized
+    if not _db_initialized:
+        _db_initialized = True
+        if DBManager is not None:
+            try:
+                _db = DBManager.get_instance("neurons_vincent")
+            except Exception as e:
+                print(f"Error getting db: {e}")
+    return _db
 half_descriptions = {}
 
-# Load half neuron descriptions if ARTIFACTS_DIR is set
-_half_neurons_path = None
-if ENV.ARTIFACTS_DIR is not None:
-    from pathlib import Path
-    _half_neurons_path = str(Path(ENV.ARTIFACTS_DIR) / "half_neurons" / "**" / "*.json")
-
-for file in glob.glob(_half_neurons_path) if _half_neurons_path else []:
+_artifacts_dir = os.environ.get("ARTIFACTS_DIR", "")
+_half_neurons_glob = os.path.join(_artifacts_dir, "half_neurons", "**", "*.json") if _artifacts_dir else ""
+for file in glob.glob(_half_neurons_glob):
     layer = file.split("/")[-2]
     neuron = file.split("/")[-1].split(".")[0]
     with open(file, "r") as f:
@@ -41,6 +49,8 @@ for file in glob.glob(_half_neurons_path) if _half_neurons_path else []:
 
 
 def get_neuron_description_from_db(neuron: Neuron, db: DBManager) -> str | None:
+    if db is None:
+        return None
     assert neuron.polarity is not None
 
     try:
@@ -68,7 +78,7 @@ def get_neuron_description_from_db(neuron: Neuron, db: DBManager) -> str | None:
 def get_descriptions_for_neurons(neurons: list[Neuron], db: DBManager) -> list[str | None]:
     assert isinstance(neurons, list)
     with ThreadPoolExecutor() as executor:
-        return list(executor.map(partial(get_neuron_description_from_db, db=db), neurons))
+        return list(executor.map(partial(get_neuron_description_from_db, db=_get_db()), neurons))
 
 
 def get_descriptions(
@@ -80,7 +90,7 @@ def get_descriptions(
     neuron_label_cache: dict = {},
 ) -> tuple[pd.DataFrame, dict]:
     """Fetch neuron descriptions from the database and add them to the nodes DataFrame."""
-    if not get_desc or db is None:
+    if not get_desc or _get_db() is None:
         nodes["description"] = nodes.apply(lambda x: "", axis=1)
         return nodes, neuron_label_cache
 
@@ -137,7 +147,7 @@ def get_descriptions(
         iterator = tqdm(iterator, desc="Fetching descriptions")
     for i in iterator:
         neuron_batch = neuron_objects[i : i + _neuron_batch_size]
-        descriptions = get_descriptions_for_neurons(neuron_batch, db)
+        descriptions = get_descriptions_for_neurons(neuron_batch, _get_db())
         for neuron, description in zip(neuron_batch, descriptions):
             neuron_label_cache[
                 (

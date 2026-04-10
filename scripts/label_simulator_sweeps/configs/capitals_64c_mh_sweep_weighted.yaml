@@ -1,0 +1,11 @@
+# Capitals circuit: 64 clusters, min_highlights sweep, attr weighted by attribution
+circuit_pickle: results/case_studies/capitals_circuit.pkl
+n_clusters: 64
+min_highlights: [1, 2, 4, 8, 16, 32]
+verbose: true
+sorted_threshold: true
+use_contrib_minibatch: true
+weight_attr_by_attribution: true
+explainer_model: Transluce/llama_8b_explainer
+simulator_model: Transluce/llama_8b_simulator
+num_expl_samples: 5

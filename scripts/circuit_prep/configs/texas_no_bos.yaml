@@ -1,0 +1,9 @@
+# Texas circuit preparation — with BOS token included
+dataset: texas
+output_path: results/case_studies/texas_circuit_no_bos.pkl
+percentage_threshold: 0.005
+batch_size: 1
+k: 5
+apply_blacklist: true
+keep_bos: true
+verbose: true

@@ -1,0 +1,48 @@
+% Requires: \usepackage[table]{xcolor}, \usepackage{longtable}, \usepackage{booktabs}
+\definecolor{highcolor}{HTML}{2166ac}
+\definecolor{lowcolor}{HTML}{b2182b}
+\begingroup\small
+\begin{longtable}{llrrr}
+\caption{Feature scores for axis task.}
+\label{tab:axis} \\
+\toprule
+Feature & Description & AUROC & In-class & Out-of-class \\
+\endhead
+\midrule
+\multicolumn{5}{l}{\textbf{Target: size}} \\
+\rowcolor{lowcolor!35!white} \neuron{21}{4920}{-} & $^-$activation occurs on the token "from" whe... & $0.054$ & $-3.15\%$ & $-0.77\%$ \\
+\rowcolor{highcolor!31!white} \neuron{25}{14237}{+} & $^+$the word "pi[U+00F9]" in an Italian conte... & $0.889$ & $1.35\%$ & $0.00\%$ \\
+\rowcolor{highcolor!40!white} \neuron{14}{2801}{-} & $^-$tokens "largest," "biggest," "size," "sma... & $1.000$ & $1.05\%$ & $0.00\%$ \\
+\rowcolor{lowcolor!25!white} \neuron{22}{4433}{+} & $^+$activation occurs on prepositions, conjun... & $0.185$ & $-0.71\%$ & $-0.29\%$ \\
+\rowcolor{lowcolor!32!white} \neuron{22}{929}{+} & $^+$colloquial use of "be" in contexts discus... & $0.094$ & $0.04\%$ & $0.61\%$ \\
+\rowcolor{highcolor!31!white} \neuron{19}{1691}{+} & $^+$tokens suggesting duality or contrast & $0.889$ & $0.00\%$ & $-0.53\%$ \\
+\midrule
+\multicolumn{5}{l}{\textbf{Target: speed}} \\
+\rowcolor{highcolor!31!white} \neuron{25}{7423}{+} & $^+$tokens "m[U+00E1]s" and "pi[U+00F9]" indi... & $0.889$ & $5.40\%$ & $0.00\%$ \\
+\rowcolor{lowcolor!24!white} \neuron{25}{6793}{+} & $^+$comparative expressions about speed or pa... & $0.194$ & $-1.92\%$ & $0.00\%$ \\
+\rowcolor{highcolor!31!white} \neuron{24}{13094}{+} & $^+$comparative adjectives such as \{\{m[U+00... & $0.889$ & $1.70\%$ & $0.00\%$ \\
+\rowcolor{highcolor!31!white} \neuron{20}{11041}{+} & $^+$the phrase "at your own" or variations; "... & $0.889$ & $1.51\%$ & $0.00\%$ \\
+\rowcolor{highcolor!37!white} \neuron{16}{8263}{-} & $^-$the word \{\{Fast\}\} or phrases indicati... & $0.972$ & $1.13\%$ & $0.00\%$ \\
+\rowcolor{highcolor!28!white} \neuron{20}{4961}{+} & $^+$activates on single letters or specific t... & $0.858$ & $1.06\%$ & $0.87\%$ \\
+\rowcolor{lowcolor!25!white} \neuron{19}{1691}{+} & $^+$tokens suggesting duality or contrast & $0.182$ & $-0.66\%$ & $-0.20\%$ \\
+\rowcolor{highcolor!24!white} \neuron{21}{351}{-} & $^-$activating tokens include "yang" followin... & $0.808$ & $0.63\%$ & $0.13\%$ \\
+\rowcolor{lowcolor!26!white} \neuron{19}{1643}{-} & $^-$activation occurs on references to speed ... & $0.167$ & $-0.45\%$ & $0.00\%$ \\
+\rowcolor{highcolor!29!white} \neuron{18}{1015}{+} & $^+$context-specific queries regarding notabl... & $0.867$ & $0.44\%$ & $0.26\%$ \\
+\rowcolor{highcolor!26!white} \neuron{18}{10753}{+} & $^+$function words indicating an action or pu... & $0.829$ & $0.34\%$ & $0.05\%$ \\
+\midrule
+\multicolumn{5}{l}{\textbf{Target: temperature}} \\
+\rowcolor{highcolor!33!white} \neuron{26}{5654}{+} & $^+$activation on tokens indicating high temp... & $0.917$ & $2.20\%$ & $0.00\%$ \\
+\rowcolor{lowcolor!28!white} \neuron{25}{2969}{-} & $^-$tokens related to temperature and warmth/... & $0.139$ & $-1.60\%$ & $0.00\%$ \\
+\rowcolor{lowcolor!40!white} \neuron{19}{5652}{-} & $^-$mentions of heat, temperature, warming, o... & $0.000$ & $-1.09\%$ & $0.00\%$ \\
+\rowcolor{highcolor!40!white} \neuron{14}{13885}{-} & $^-$temperature unit "\{\{[U+00B0]C\}\}" in s... & $1.000$ & $1.04\%$ & $0.00\%$ \\
+\rowcolor{highcolor!25!white} \neuron{20}{8802}{-} & $^-$requests for spacing out words or clarifi... & $0.823$ & $-0.63\%$ & $-1.30\%$ \\
+\rowcolor{highcolor!24!white} \neuron{22}{7399}{-} & $^-$tokens "or" and "and" in response to inqu... & $0.805$ & $0.49\%$ & $0.11\%$ \\
+\rowcolor{lowcolor!28!white} \neuron{20}{7483}{+} & $^+$the token "\{\{in\}\}" in various context... & $0.139$ & $-0.33\%$ & $0.00\%$ \\
+\rowcolor{highcolor!26!white} \neuron{20}{7973}{+} & $^+$temperature ranges and conditions & $0.833$ & $0.27\%$ & $0.00\%$ \\
+\rowcolor{highcolor!24!white} \neuron{15}{9288}{+} & $^+$mentions of named entities (people, bands... & $0.810$ & $0.25\%$ & $0.02\%$ \\
+\rowcolor{highcolor!24!white} \neuron{17}{4188}{-} & $^-$the word "he" when followed by clauses, i... & $0.804$ & $-0.14\%$ & $-0.41\%$ \\
+\rowcolor{highcolor!38!white} \neuron{21}{4920}{-} & $^-$activation occurs on the token "from" whe... & $0.976$ & $-0.14\%$ & $-2.27\%$ \\
+\rowcolor{lowcolor!31!white} \neuron{22}{2802}{+} & $^+$highlighting of terms related to potentia... & $0.111$ & $0.00\%$ & $0.56\%$ \\
+\bottomrule
+\end{longtable}
+\endgroup
