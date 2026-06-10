@@ -173,6 +173,67 @@ prompt; `weight` is the raw jacobian edge weight.
 
 ---
 
+## Hardware / install on a single consumer GPU
+
+Gemma 2 2B is small (~2.6B params ≈ **5.2 GB in bf16**), so a single consumer GPU (e.g. an
+**RTX 3080, 10–12 GB**) is enough — no cloud/RunPod needed. Only **Step 1 (tracing)** uses the
+GPU; **Step 2 (export)** is tokenizer-only and runs on CPU.
+
+- **Precision / batch size:** trace in **bf16** (the default in `prep.py` and the export CLIs).
+  On a 10 GB card use `--batch-size 1` or `2` (the `capitals_gemma.yaml` default of 4 can OOM
+  on long prompts).
+- **The completeness test loads bf16 by default** now (fits any modern GPU). For the tight
+  fp32 check (needs ~10.5 GB just for weights — OOMs a 10 GB card), run it on a bigger GPU:
+  `GEMMA2_TEST_DTYPE=float32 uv run pytest tests/test_gemma2_attribution.py`.
+- **vLLM is NOT needed for this workflow.** It is declared in `pyproject.toml` and used only by
+  ADAG's *built-in* explainer (which you replace with your own pipeline); it is imported
+  lazily and never touched during tracing or export. It is, however, **Linux-only**, which
+  affects install:
+  - **Linux or WSL2 (+CUDA):** `uv sync` works as-is — vLLM builds fine on Linux/Ampere.
+  - **Windows native:** `uv sync` will fail building vLLM. Use **WSL2** (recommended), or a
+    minimal env (torch 2.5.1 + transformers + pandas + numpy + scikit-learn + anthropic + the
+    `lib/` packages) skipping `vllm`/`sae_lens` — nothing on your path imports them.
+- RTX 3080 (Ampere, sm_86) is fully supported by the pinned `torch==2.5.1` + CUDA 12.x.
+
+## How a node is identified in ADAG (vs an "id and more" schema)
+
+ADAG does **not** use a single opaque global node id at the analysis layer. A node is keyed by
+the tuple **`(layer, token, neuron)`** (plus a `polarity` sign), and is decorated with data.
+The same identity shows up at four levels:
+
+| Level | Where | Node identity | Extra fields |
+|-------|-------|---------------|--------------|
+| In-memory node | `circuits/tracing/utils.py` `Node` | `(layer, token, neuron)` | `activation`, `final_attribution`, `attr_map`, `contrib_map` |
+| Canonical key | `circuits/analysis/cluster.py` `NeuronId` | `(layer, token, neuron, polarity)`; `to_string()` → `"layer,token,neuron"` | hashable key used for clustering/labeling |
+| DataFrame row | `CircuitData.df_node` | columns `layer, token, neuron` (+ `label` = which prompt, `name___ci_idx`) | `attribution`, `activation`, `attr_map`, `contrib_map` |
+| Frontend node | `circuits/frontend/graph_models.py` `Node` | string `node_id` (see below) | `feature`, `ctx_idx`, `feature_type`, `influence`, `activation`, `attr_map`, `contrib_map`, `clerp` |
+
+**Conventions:** `layer == -1` (or `"E"` in the frontend) is a **token embedding** node;
+the final layer / `num_layers+1` is a **logit** node; everything in between is an MLP
+**neuron** (`feature_type = "cross layer transcoder"`). `token` / `ctx_idx` is the sequence
+position; `neuron` is the MLP intermediate-dimension index.
+
+**Only the frontend builds explicit string ids** (for the circuit-tracer UI):
+- feature/neuron: `node_id = f"{layer}_{neuron}_{pos}"`
+- token (embedding): `node_id = f"E_{vocab_idx}_{pos}"`
+- logit: `node_id = f"{num_layers+1}_{vocab_idx}_{pos}"`
+- error: `node_id = f"0_{layer}_{pos}"`
+
+In **the JSON this repo exports** (`neuron_export.py`), the mapping to your SLT "id + fields"
+schema is:
+- **curated features** (`neurons[]`): identified by `(layer, neuron, polarity)` — token-summed
+  — plus `rank`, `attribution`, and the text bundle (`tokens`, `attr_activations`,
+  `highlighted_text`, `top_input_tokens`, `output_contributions`, `raw_contrib_map`).
+- **graph nodes** (`nodes[]`): identified by `(layer, token, neuron)` with `attribution`,
+  `activation`.
+- **edges** (`edges[]`): `src`/`tgt` each a `(layer, token, neuron)` node, with `attribution`
+  and raw jacobian `weight`.
+
+So if your SLT nodes carry a unique `id` plus metadata, the ADAG equivalent of that `id` is
+the `(layer, token, neuron[, polarity])` tuple (stringifiable as `"layer,token,neuron"`), and
+the "more" maps onto the attribution/activation/attr_map/contrib_map fields above. Join the
+token-summed features to the per-token graph nodes/edges by `(layer, neuron)`.
+
 ## Important caveats for whoever picks this up
 
 - **Not yet run end-to-end on a GPU.** All new files byte-compile and the data-flow was
