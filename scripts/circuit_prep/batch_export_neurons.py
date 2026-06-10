@@ -31,6 +31,7 @@ each entry; ci_idx aligns with the order prompts were traced in.
 import argparse
 import importlib.util
 import json
+import re
 from pathlib import Path
 
 from circuits.analysis.circuit_ops import Circuit
@@ -40,6 +41,41 @@ from circuits.analysis.neuron_export import (
 )
 from circuits.tracing.trace import CircuitData
 from circuits.utils.constants import N_LAYERS_MAPPING
+
+
+def _slug(text: str, max_len: int = 40) -> str:
+    """Filesystem-safe slug from a label/target string."""
+    text = (text or "").strip()
+    text = re.sub(r"[^0-9A-Za-z]+", "_", text).strip("_").lower()
+    return text[:max_len] or "graph"
+
+
+def _write_per_graph_files(results: list[dict], out_dir: Path, split: bool) -> None:
+    """Write one JSON per graph into `out_dir` (named graph_<ci>_<label>.json).
+
+    With `split=True`, the graph structure (nodes+edges) goes to out_dir/graphs/ and the
+    neurons+text to out_dir/neurons/, as separate files sharing the same stem.
+    """
+    out_dir.mkdir(parents=True, exist_ok=True)
+    graphs_dir = out_dir / "graphs"
+    neurons_dir = out_dir / "neurons"
+    if split:
+        graphs_dir.mkdir(exist_ok=True)
+        neurons_dir.mkdir(exist_ok=True)
+
+    for r in results:
+        stem = f"graph_{r['ci_idx']:04d}_{_slug(r.get('target') or r.get('label'))}"
+        meta = {k: r.get(k) for k in ("ci_idx", "label", "prompt", "target")}
+        if split:
+            graph_doc = {**meta, "nodes": r.get("nodes", []), "edges": r.get("edges", [])}
+            neuron_doc = {**meta, "neurons": r.get("neurons", [])}
+            with open(graphs_dir / f"{stem}.json", "w") as f:
+                json.dump(graph_doc, f, indent=2, ensure_ascii=False)
+            with open(neurons_dir / f"{stem}.json", "w") as f:
+                json.dump(neuron_doc, f, indent=2, ensure_ascii=False)
+        else:
+            with open(out_dir / f"{stem}.json", "w") as f:
+                json.dump(r, f, indent=2, ensure_ascii=False)
 
 
 def _load_dataset_text(dataset: str) -> tuple[list[str] | None, list[str] | None]:
@@ -79,8 +115,29 @@ def main() -> None:
         default=None,
         help="Override num layers (default: from model-id, else inferred from circuit).",
     )
-    parser.add_argument("--out", default="neurons.json", help="Output path.")
+    parser.add_argument("--out", default="neurons.json", help="Single-file output path.")
+    parser.add_argument(
+        "--out-dir",
+        default=None,
+        help="Write ONE JSON per graph into this folder (per-prompt mode). Overrides --out.",
+    )
+    parser.add_argument(
+        "--split",
+        action="store_true",
+        help="With --out-dir: write graph structure (nodes+edges) to graphs/ and "
+        "neurons+text to neurons/ as separate files per graph.",
+    )
     parser.add_argument("--jsonl", action="store_true", help="Write JSONL (one line per graph).")
+    parser.add_argument(
+        "--no-edges",
+        action="store_true",
+        help="Omit the attribution-graph edge list from per-prompt output.",
+    )
+    parser.add_argument(
+        "--no-nodes",
+        action="store_true",
+        help="Omit the full graph node list (keep only top-N neurons + text).",
+    )
     args = parser.parse_args()
 
     from transformers import AutoTokenizer
@@ -105,6 +162,8 @@ def main() -> None:
             num_layers=num_layers,
             prompts=prompts,
             targets=labels,
+            include_edges=not args.no_edges,
+            include_all_nodes=not args.no_nodes,
         )
         n_graphs = len(results)
     else:
@@ -113,19 +172,28 @@ def main() -> None:
         )
         n_graphs = 1
 
-    out_path = Path(args.out)
-    if args.jsonl:
-        with open(out_path, "w") as f:
-            rows = results if args.mode == "per-prompt" else [results]
-            for row in rows:
-                f.write(json.dumps(row, ensure_ascii=False) + "\n")
+    # Output: one file per graph (--out-dir) or a single combined file (--out / --jsonl).
+    if args.out_dir is not None and args.mode == "per-prompt":
+        _write_per_graph_files(results, Path(args.out_dir), split=args.split)
     else:
-        with open(out_path, "w") as f:
-            json.dump(results, f, indent=2, ensure_ascii=False)
+        out_path = Path(args.out)
+        if args.jsonl:
+            rows = results if args.mode == "per-prompt" else [results]
+            with open(out_path, "w") as f:
+                for row in rows:
+                    f.write(json.dumps(row, ensure_ascii=False) + "\n")
+        else:
+            with open(out_path, "w") as f:
+                json.dump(results, f, indent=2, ensure_ascii=False)
 
     if args.mode == "per-prompt":
         total_neurons = sum(len(r["neurons"]) for r in results)
-        print(f"Wrote {n_graphs} graphs ({total_neurons} neuron entries) to {out_path}")
+        total_edges = sum(len(r.get("edges", [])) for r in results)
+        dest = args.out_dir or args.out
+        print(
+            f"Wrote {n_graphs} graphs ({total_neurons} neuron entries, "
+            f"{total_edges} edges) to {dest}"
+        )
         for r in results[:5]:
             top = r["neurons"][0] if r["neurons"] else {}
             drivers = ", ".join(repr(t) for t, _ in top.get("top_input_tokens", [])[:3])
@@ -134,7 +202,7 @@ def main() -> None:
                 f"  → L{top.get('layer')} N{top.get('neuron')} drivers: {drivers}"
             )
     else:
-        print(f"Wrote {len(results)} aggregate neurons to {out_path}")
+        print(f"Wrote {len(results)} aggregate neurons to {args.out}")
 
 
 if __name__ == "__main__":

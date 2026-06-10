@@ -83,6 +83,69 @@ def _record_to_dict(
     }
 
 
+def _parse_edges_for_label(df_edge, label: str) -> list[dict]:
+    """
+    Extract the attribution-graph edges for one prompt (label) from the raw df_edge.
+
+    df_edge stores each edge with "src->tgt" strings in the layer/token/neuron columns plus
+    a normalized `attribution` and the raw jacobian `weight`. A source neuron with layer -1
+    is the token embedding. Returns one dict per edge.
+    """
+    if df_edge is None or len(df_edge) == 0:
+        return []
+    sub = df_edge[df_edge["label"] == label]
+    edges: list[dict] = []
+    for _, row in sub.iterrows():
+        try:
+            src_layer, tgt_layer = str(row["layer"]).split("->")
+            src_token, tgt_token = str(row["token"]).split("->")
+            src_neuron, tgt_neuron = str(row["neuron"]).split("->")
+        except ValueError:
+            continue
+        edges.append(
+            {
+                "src": {
+                    "layer": int(src_layer),
+                    "token": int(src_token),
+                    "neuron": int(src_neuron),
+                },
+                "tgt": {
+                    "layer": int(tgt_layer),
+                    "token": int(tgt_token),
+                    "neuron": int(tgt_neuron),
+                },
+                "attribution": float(row["attribution"]),
+                "weight": float(row["weight"]),
+            }
+        )
+    return edges
+
+
+def _raw_nodes_for_label(df_node, label: str) -> list[dict]:
+    """
+    All surviving graph nodes for one prompt (per token position), from the raw df_node.
+
+    These are the graph's nodes (lightweight: no attr/contrib maps) that the `edges` connect.
+    `layer == -1` is the token embedding; the top (final) layer is the logit node. Each node
+    keeps its token position so it lines up with edge endpoints.
+    """
+    if df_node is None or len(df_node) == 0:
+        return []
+    sub = df_node[df_node["label"] == label]
+    nodes: list[dict] = []
+    for _, row in sub.iterrows():
+        nodes.append(
+            {
+                "layer": int(row["layer"]),
+                "token": int(row["token"]),
+                "neuron": int(row["neuron"]),
+                "attribution": float(row["attribution"]),
+                "activation": float(row["activation"]),
+            }
+        )
+    return nodes
+
+
 def _prepare_circuit(circuit: Circuit, tokenizer, num_layers: int | None):
     """Shared prep: add NeuronId columns, sum maps over tokens, build neuron records.
 
@@ -156,13 +219,23 @@ def export_per_prompt_from_circuit(
     num_layers: int | None = None,
     prompts: list[str] | None = None,
     targets: list[str] | None = None,
+    include_edges: bool = True,
+    include_all_nodes: bool = True,
 ) -> list[dict]:
     """
     Per-prompt (per attribution graph): for each traced prompt, return its own top-`top_n`
-    neurons ranked by |attribution| on that prompt, each with the text bundle.
+    neurons ranked by |attribution| on that prompt (each with the text bundle), the prompt's
+    full attribution-graph `nodes` and `edges` (the pruned graph), so each entry is a complete
+    self-contained graph.
 
-    Returns one dict per prompt: {ci_idx, label, prompt, target, neurons: [...]}, ordered by
-    ci_idx (which matches the order prompts were traced in).
+    Returns one dict per prompt:
+        {ci_idx, label, prompt, target, neurons: [...], nodes: [...], edges: [...]}
+    ordered by ci_idx (matching the order prompts were traced in). Pass `include_edges=False`
+    / `include_all_nodes=False` to omit those.
+
+    Granularity: `neurons` (the curated features + text) are summed over token positions
+    (keyed by layer+neuron); `nodes`/`edges` (the raw graph) keep token positions (carry
+    layer, token, neuron). Join a node/edge endpoint to a feature by (layer, neuron).
     """
     df_node, _neuron_data, ci_mapping = _prepare_circuit(circuit, tokenizer, num_layers)
 
@@ -194,15 +267,18 @@ def export_per_prompt_from_circuit(
             if len(neurons) >= top_n:
                 break
 
-        per_prompt.append(
-            {
-                "ci_idx": ci_idx,
-                "label": str(label),
-                "prompt": prompts[ci_idx] if prompts and ci_idx < len(prompts) else None,
-                "target": targets[ci_idx] if targets and ci_idx < len(targets) else None,
-                "neurons": neurons,
-            }
-        )
+        entry = {
+            "ci_idx": ci_idx,
+            "label": str(label),
+            "prompt": prompts[ci_idx] if prompts and ci_idx < len(prompts) else None,
+            "target": targets[ci_idx] if targets and ci_idx < len(targets) else None,
+            "neurons": neurons,
+        }
+        if include_all_nodes:
+            entry["nodes"] = _raw_nodes_for_label(circuit.df_node, label)
+        if include_edges:
+            entry["edges"] = _parse_edges_for_label(circuit.df_edge, label)
+        per_prompt.append(entry)
 
     per_prompt.sort(key=lambda d: d["ci_idx"])
     return per_prompt
