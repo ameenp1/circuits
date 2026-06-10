@@ -429,6 +429,7 @@ def compute_circuits(
                 system_prompt=system_prompt,
                 true_answers=true_answers,
                 verbose=config.verbose,
+                use_chat_format=tokenizer.chat_template is not None,
             )
         nodes, edges = get_all_pairs_cl_ja_effects_with_attributions(
             model=model,
