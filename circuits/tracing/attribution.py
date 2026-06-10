@@ -346,9 +346,13 @@ def _get_global_important_neurons_mask(
         if verbose:
             print("sorted_values", sorted_values.shape)
 
-        total_mass = sorted_values.sum(dim=-1, keepdim=True)
-        cumulative_mass = torch.cumsum(sorted_values, dim=-1)
-        cumulative_ratio = cumulative_mass / total_mass  # shape: [batch, num_vals]
+        # Compute the cumulative-attribution ratio in float32. A bfloat16 cumsum over the
+        # ~millions of neuron attributions loses monotonicity (tiny values vanish into a
+        # large running sum), which makes searchsorted return out-of-range indices and
+        # triggers a device-side index assert. float32 keeps the prefix sums monotonic.
+        sorted_f32 = sorted_values.float()
+        total_mass = sorted_f32.sum(dim=-1, keepdim=True).clamp_min(1e-20)
+        cumulative_ratio = torch.cumsum(sorted_f32, dim=-1) / total_mass  # [batch, num_vals]
 
         # Find threshold value
         thr = torch.full(
@@ -358,14 +362,15 @@ def _get_global_important_neurons_mask(
             device=cumulative_ratio.device,
         ).unsqueeze(-1)
         cutoff_idx = torch.searchsorted(cumulative_ratio, thr) + 1
-        cutoff_idx = cutoff_idx.squeeze(-1)
+        # Clamp to a valid index range so a degenerate row can never index out of bounds.
+        cutoff_idx = cutoff_idx.squeeze(-1).clamp_(1, sorted_values.shape[-1])
         threshold_value = sorted_values[torch.arange(sorted_values.shape[0]), cutoff_idx - 1]
 
         # Create mask and get coordinates directly
         mask = abs_attributions >= threshold_value[:, None, None, None]
 
         # Clean up
-        del sorted_values, cumulative_mass, cumulative_ratio
+        del sorted_values, sorted_f32, cumulative_ratio
         torch.cuda.empty_cache()
     # option 2: get topk neurons - use topk instead of full sort
     elif topk_neurons is not None:
