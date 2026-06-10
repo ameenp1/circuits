@@ -6,6 +6,7 @@ in prep for circuit tracing.
 from typing import NamedTuple
 
 import torch
+from circuits.tracing.grad import _effective_norm_weight, _norm_eps
 from transformers import PreTrainedTokenizer
 from util.gpu import gpu_mem_str
 from util.parallel import TensorDict
@@ -112,9 +113,12 @@ def collect_neuron_acts(
     B = resids_LBTD[0].size(0)
     Tf = resids_LBTD[0].size(1)
 
-    # Derive output norm constants
-    unembed_norm_weight_D = model.model.norm.weight.detach().to(device)
-    unembed_norm_variance_epsilon = model.model.norm.variance_epsilon
+    # Derive output norm constants. Use the architecture-aware accessors so Gemma2's
+    # (1 + weight) RMSNorm scale and `eps` attribute name are handled (no-op for Llama/Qwen).
+    # `model.model.norm` is the raw HF norm here (the replacement model is reverted before
+    # edge tracing collects activations).
+    unembed_norm_weight_D = _effective_norm_weight(model.model.norm).detach().to(device)
+    unembed_norm_variance_epsilon = _norm_eps(model.model.norm)
     output_norm_const_BTf11D = _llama3_layernorm_fn(
         resids_LBTD[L - 1].new_ones((B * Tf, 1, 1), device=device),
         resids_LBTD[L - 1][:, :].view(B * Tf, D),

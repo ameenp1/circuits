@@ -1,0 +1,11 @@
+# Capitals circuit preparation for Gemma 2 2B (base model)
+dataset: capitals
+output_path: results/case_studies/capitals_gemma_circuit.pkl
+model-id: google/gemma-2-2b
+# Gemma uses a coarser attribution scale than Llama (see THRESHOLD_RANGE_MAPPING in
+# circuits/utils/constants.py), so start with a looser pruning cutoff than the Llama 0.005.
+percentage_threshold: 0.01
+batch_size: 4
+k: 5
+# No blacklist is defined for Gemma2 (BLACKLISTED_NEURONS defaults to empty), so leave it off.
+verbose: false

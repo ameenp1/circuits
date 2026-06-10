@@ -2,19 +2,39 @@
 Code for constructing the replacement model with various modifications to the original backward pass
 in order to improve gradient-based attribution techniques.
 
-Supports multiple model architectures (Llama, Qwen3) with a shared interface.
+Supports multiple model architectures (Llama, Qwen3, Gemma2) with a shared interface.
 """
 
 import torch
+from circuits.tracing.grad.gemma2 import Gemma2Attention, Gemma2MLP, Gemma2RMSNorm
 from circuits.tracing.grad.llama import LlamaAttention, LlamaMLP, LlamaRMSNorm, repeat_kv
 from circuits.tracing.grad.qwen3 import Qwen3Attention, Qwen3MLP, Qwen3RMSNorm
 from torch import nn
 from transformers.modeling_utils import ALL_ATTENTION_FUNCTIONS
 
 # Map from HF module types to their "kind" for dispatching
-_NORM_TYPES: tuple[type[nn.Module], ...] = (LlamaRMSNorm, Qwen3RMSNorm)
-_ATTN_TYPES: tuple[type[nn.Module], ...] = (LlamaAttention, Qwen3Attention)
-_MLP_TYPES: tuple[type[nn.Module], ...] = (LlamaMLP, Qwen3MLP)
+_NORM_TYPES: tuple[type[nn.Module], ...] = (LlamaRMSNorm, Qwen3RMSNorm, Gemma2RMSNorm)
+_ATTN_TYPES: tuple[type[nn.Module], ...] = (LlamaAttention, Qwen3Attention, Gemma2Attention)
+_MLP_TYPES: tuple[type[nn.Module], ...] = (LlamaMLP, Qwen3MLP, Gemma2MLP)
+
+# Gemma2 RMSNorm scales by (1 + weight) rather than weight, and normalizes in float32.
+# The extra feedforward layernorms below sit directly on the MLP path in Gemma2's
+# sandwich-norm decoder layer and must also be linearized for correct attribution.
+_GEMMA2_EXTRA_NORM_ATTRS: tuple[str, ...] = ("pre_feedforward_layernorm", "post_feedforward_layernorm")
+
+
+def _effective_norm_weight(norm: nn.Module) -> torch.Tensor:
+    """Return the effective RMSNorm scale: (1 + weight) for Gemma2, else weight."""
+    if isinstance(norm, Gemma2RMSNorm):
+        return 1.0 + norm.weight
+    return norm.weight
+
+
+def _norm_eps(norm: nn.Module) -> float:
+    """RMSNorm epsilon — Llama/Qwen expose `variance_epsilon`, Gemma2 exposes `eps`."""
+    if hasattr(norm, "variance_epsilon"):
+        return norm.variance_epsilon
+    return norm.eps
 
 
 def _rms_layernorm_fn(
@@ -63,6 +83,8 @@ class StraightThroughRMSNorm(StopGradientModule):
       weight   is frozen (requires_grad = False)
 
     Works with any RMSNorm module that has .weight and .variance_epsilon attributes.
+    Gemma2RMSNorm scales by (1 + weight) instead of weight; `_effective_norm_weight`
+    handles that so the linearized coefficient matches the real forward value.
     """
 
     def __init__(self, norm: nn.Module):
@@ -76,8 +98,8 @@ class StraightThroughRMSNorm(StopGradientModule):
         coeff = _rms_layernorm_fn(
             x.new_ones(B * L, 1, 1),
             x.view(B * L, D),
-            self.norm.weight,
-            self.norm.variance_epsilon,
+            _effective_norm_weight(self.norm),
+            _norm_eps(self.norm),
         ).detach()
         return x * coeff.permute(1, 0, 2).view(B, L, D)
 
@@ -97,6 +119,14 @@ def noqk_attention_forward(
     value_states = repeat_kv(value, module.num_key_value_groups)
 
     attn_scores = torch.matmul(query, key_states.transpose(2, 3)) * scaling
+    # Gemma2 applies tanh softcapping to the attention logits (attn_logit_softcapping=50.0);
+    # apply it here so the (detached) attention map matches the real forward pass. No-op for
+    # Llama/Qwen where the config attribute is absent or None.
+    softcap = getattr(getattr(module, "config", None), "attn_logit_softcapping", None)
+    if softcap is not None:
+        attn_scores = attn_scores / softcap
+        attn_scores = torch.tanh(attn_scores)
+        attn_scores = attn_scores * softcap
     if attention_mask is not None:
         causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
         attn_scores = attn_scores + causal_mask
@@ -227,6 +257,41 @@ class RelPGradMLP(StopGradientModule):
         )
 
 
+def _wrap_extra_ff_norms(layer: nn.Module) -> None:
+    """Linearize Gemma2's extra sandwich-norm feedforward LayerNorms, if present."""
+    for attr in _GEMMA2_EXTRA_NORM_ATTRS:
+        norm = getattr(layer, attr, None)
+        if norm is not None and not isinstance(norm, StraightThroughRMSNorm):
+            setattr(layer, attr, StraightThroughRMSNorm(norm))
+
+
+def _unwrap_extra_ff_norms(layer: nn.Module) -> None:
+    """Restore Gemma2's extra feedforward LayerNorms wrapped by `_wrap_extra_ff_norms`."""
+    for attr in _GEMMA2_EXTRA_NORM_ATTRS:
+        norm = getattr(layer, attr, None)
+        if isinstance(norm, StraightThroughRMSNorm):
+            setattr(layer, attr, norm.norm)
+
+
+def _disable_final_softcap(model) -> None:
+    """
+    Disable Gemma2's final-logit softcapping during attribution so the logits are a linear
+    function of the residual stream (required for attribution completeness). The original
+    value is stashed on the model so `_restore_final_softcap` can put it back.
+    """
+    softcap = getattr(model.config, "final_logit_softcapping", None)
+    if softcap is not None:
+        model._adag_saved_final_softcap = softcap
+        model.config.final_logit_softcapping = None
+
+
+def _restore_final_softcap(model) -> None:
+    """Restore final-logit softcapping disabled by `_disable_final_softcap`."""
+    if getattr(model, "_adag_saved_final_softcap", None) is not None:
+        model.config.final_logit_softcapping = model._adag_saved_final_softcap
+        model._adag_saved_final_softcap = None
+
+
 def stop_nonlinear_grad(
     model,
     use_relp_grad: bool = False,
@@ -235,11 +300,14 @@ def stop_nonlinear_grad(
     """
     Stop gradient for all non-linear layers in the model.
 
-    - LayerNorms: linearized via StraightThroughRMSNorm (detached coefficients)
+    - LayerNorms: linearized via StraightThroughRMSNorm (detached coefficients). For Gemma2's
+      sandwich-norm layers, the extra pre/post feedforward norms are linearized too.
     - Attention: QK path detached, gradient flows only through OV
     - MLP: if use_relp_grad, activation gate is detached and Shapley halving applied;
            otherwise, entire gate branch is detached
+    - Output: Gemma2 final-logit softcapping is disabled so logits stay linear in the residual.
     """
+    _disable_final_softcap(model)
     model.model.norm = StraightThroughRMSNorm(model.model.norm)
     for layer in range(len(model.model.layers)):
         model.model.layers[layer].input_layernorm = StraightThroughRMSNorm(
@@ -248,6 +316,7 @@ def stop_nonlinear_grad(
         model.model.layers[layer].post_attention_layernorm = StraightThroughRMSNorm(
             model.model.layers[layer].post_attention_layernorm
         )
+        _wrap_extra_ff_norms(model.model.layers[layer])
         model.model.layers[layer].self_attn = NoQKGradAttention(model.model.layers[layer].self_attn)
         if use_relp_grad:
             model.model.layers[layer].mlp = RelPGradMLP(
@@ -262,12 +331,14 @@ def revert_stop_nonlinear_grad(model):
     """
     Revert stop gradient for all non-linear layers in the model.
     """
+    _restore_final_softcap(model)
     model.model.norm = model.model.norm.norm
     for layer in range(len(model.model.layers)):
         model.model.layers[layer].input_layernorm = model.model.layers[layer].input_layernorm.norm
         model.model.layers[layer].post_attention_layernorm = model.model.layers[
             layer
         ].post_attention_layernorm.norm
+        _unwrap_extra_ff_norms(model.model.layers[layer])
         model.model.layers[layer].self_attn = model.model.layers[layer].self_attn.attn
         model.model.layers[layer].mlp = model.model.layers[layer].mlp.mlp
     return model
@@ -281,6 +352,7 @@ def layerwise_stop_nonlinear_grad(
     use_stop_grad_on_mlps: bool = True,
     use_half_rule: bool = True,
 ):
+    _disable_final_softcap(model)
     model.model.norm = StraightThroughRMSNorm(model.model.norm)
     # for the start and the end layer, we don't do stop grad on mlp
     for layer in [start_layer, end_layer]:
@@ -292,6 +364,7 @@ def layerwise_stop_nonlinear_grad(
         model.model.layers[layer].post_attention_layernorm = StraightThroughRMSNorm(
             model.model.layers[layer].post_attention_layernorm
         )
+        _wrap_extra_ff_norms(model.model.layers[layer])
         model.model.layers[layer].self_attn = NoQKGradAttention(model.model.layers[layer].self_attn)
         if use_relp_grad:
             model.model.layers[layer].mlp = RelPGradMLP(
@@ -310,6 +383,7 @@ def layerwise_stop_nonlinear_grad(
         model.model.layers[layer].post_attention_layernorm = StraightThroughRMSNorm(
             model.model.layers[layer].post_attention_layernorm
         )
+        _wrap_extra_ff_norms(model.model.layers[layer])
         model.model.layers[layer].self_attn = NoQKGradAttention(model.model.layers[layer].self_attn)
         model.model.layers[layer].mlp = StopGradMLP(model.model.layers[layer].mlp)
 
@@ -321,6 +395,7 @@ def layerwise_revert_stop_nonlinear_grad(
     start_layer: int,
     end_layer: int,
 ):
+    _restore_final_softcap(model)
     model.model.norm = model.model.norm.norm
     for layer in range(start_layer, end_layer + 1):
         if layer < 0 or layer >= len(model.model.layers):
@@ -329,6 +404,7 @@ def layerwise_revert_stop_nonlinear_grad(
         model.model.layers[layer].post_attention_layernorm = model.model.layers[
             layer
         ].post_attention_layernorm.norm
+        _unwrap_extra_ff_norms(model.model.layers[layer])
         model.model.layers[layer].self_attn = model.model.layers[layer].self_attn.attn
         model.model.layers[layer].mlp = model.model.layers[layer].mlp.mlp
     return model
