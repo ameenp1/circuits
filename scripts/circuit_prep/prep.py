@@ -59,6 +59,15 @@ def parse_args() -> argparse.Namespace:
         help="Attribution percentage threshold. Default: 0.005",
     )
     parser.add_argument(
+        "--node-attribution-threshold",
+        type=float,
+        default=None,
+        help="Cumulative-influence pruning (circuit-tracer / neuronpedia style): keep the "
+        "smallest set of neurons covering this fraction of total attribution mass "
+        "(e.g. 0.7 to match neuronpedia). When set, it governs pruning and "
+        "--percentage-threshold is ignored.",
+    )
+    parser.add_argument(
         "--batch-size",
         type=int,
         default=1,
@@ -131,16 +140,21 @@ def parse_args() -> argparse.Namespace:
 
 def _make_adag_config(args: argparse.Namespace, apply_blacklist: bool, device: str) -> ADAGConfig:
     """Create an ADAGConfig from parsed args."""
+    node_thr = getattr(args, "node_attribution_threshold", None)
+    # The cumulative-influence prune (node_attribution_threshold) and the per-node magnitude
+    # prune (percentage_threshold) are alternatives; when the former is set it governs, so we
+    # disable the latter to avoid a second, conflicting filter (see trace.py).
+    pct_thr = None if node_thr is not None else args.percentage_threshold
     return ADAGConfig(
         device=device,
         verbose=args.verbose,
         parent_threshold=None,
         edge_threshold=0.01,
-        node_attribution_threshold=None,
+        node_attribution_threshold=node_thr,
         topk=None,
         batch_aggregation="any",
         topk_neurons=None,
-        percentage_threshold=args.percentage_threshold,
+        percentage_threshold=pct_thr,
         use_relp_grad=True,
         disable_half_rule=False,
         disable_stop_grad=False,
@@ -277,9 +291,13 @@ def main():
             seed_responses = dataset_mod.seed_responses
             labels = dataset_mod.labels
 
+        if args.node_attribution_threshold is not None:
+            thr_desc = f"node_attribution_threshold={args.node_attribution_threshold:.2f} (cumulative)"
+        else:
+            thr_desc = f"percentage_threshold={args.percentage_threshold:.4f}"
         logger.info(
-            "Building circuit (threshold=%.4f, batch_size=%d, k=%d, blacklist=%s)...",
-            args.percentage_threshold,
+            "Building circuit (%s, batch_size=%d, k=%d, blacklist=%s)...",
+            thr_desc,
             args.batch_size,
             args.k,
             apply_blacklist,

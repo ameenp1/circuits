@@ -362,11 +362,13 @@ python custom_automation/fetch_neuronpedia_prompts.py
 uv run python scripts/circuit_prep/prep.py --config configs/neuronpedia_gemma.yaml
 #    sanity-check (with verbose) that each "prompt seed -> <top token>" matches the answer.
 
-# 2. Export per-graph top-N MLP neurons + text (tokenizer-only, no GPU).
+# 2. Export per-graph MLP neurons + text (tokenizer-only, no GPU). --top-n 0 exports
+#    ALL neurons that survived pruning so every one is eligible for grouping; use a
+#    number (e.g. 30) to cap to the top-N by |attribution|.
 uv run python scripts/circuit_prep/batch_export_neurons.py \
     --circuit results/case_studies/neuronpedia_circuit.pkl \
     --model-id google/gemma-2-2b --dataset neuronpedia \
-    --top-n 30 --mode per-prompt --out-dir neuronpedia_neuron_graphs/
+    --top-n 0 --mode per-prompt --out-dir neuronpedia_neuron_graphs/
 #    -> neuronpedia_neuron_graphs/graph_0000_gemma_g.json, graph_0001_gemma_addition.json, ...
 
 # 3-4. Describe each neuron, then group neurons into supernodes. --graphs-dir loops

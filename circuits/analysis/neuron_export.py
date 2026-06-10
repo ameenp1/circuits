@@ -190,7 +190,9 @@ def export_top_neurons_from_circuit(
         (nid for nid in neuron_data if nid in scores),
         key=lambda nid: scores[nid],
         reverse=True,
-    )[:top_n]
+    )
+    if top_n is not None and top_n > 0:  # top_n <= 0 (or None) means "all surviving neurons"
+        ranked = ranked[:top_n]
 
     results: list[dict] = []
     for rank, nid in enumerate(ranked, 1):
@@ -264,8 +266,8 @@ def export_per_prompt_from_circuit(
             }
             entry.update(_record_to_dict(record, nid.polarity, tokenizer, top_tokens))
             neurons.append(entry)
-            if len(neurons) >= top_n:
-                break
+            if top_n is not None and top_n > 0 and len(neurons) >= top_n:
+                break  # top_n <= 0 (or None) means "all surviving neurons"
 
         entry = {
             "ci_idx": ci_idx,

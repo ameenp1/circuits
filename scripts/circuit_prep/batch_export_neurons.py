@@ -104,7 +104,10 @@ def main() -> None:
         default=None,
         help="Optional data module name to attach prompt/target text to each entry.",
     )
-    parser.add_argument("--top-n", type=int, default=30, help="Neurons per graph.")
+    parser.add_argument(
+        "--top-n", type=int, default=30,
+        help="Neurons per graph, ranked by |attribution|. Use 0 for ALL surviving neurons.",
+    )
     parser.add_argument("--top-tokens", type=int, default=8, help="Top tokens per example.")
     parser.add_argument(
         "--mode", choices=["per-prompt", "aggregate"], default="per-prompt", help="Export mode."
