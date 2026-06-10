@@ -44,6 +44,33 @@ embeddings and MLP neuron activations, so by Euler's theorem the summed attribut
 the logit. The test checks this in the plain stop-gradient mode (`use_relp_grad=False`),
 which carries no Shapley redistribution.
 
+### 1b. Base-model prompting fixes (`circuits/tracing/trace.py`)
+
+`google/gemma-2-2b` is a **base** model with no chat template, which broke the
+`prep.py` path in two ways. Both are fixed in `prepare_ci` / `compute_circuits`:
+
+- **Chat-template crash.** `prep.py` defaulted to `use_chat_format=True`, calling
+  `tokenizer.apply_chat_template(...)` — which raises on a base model. Fixed at the
+  `compute_circuits` → `prepare_cis` call site: `use_chat_format=tokenizer.chat_template
+  is not None`. Auto-detects per tokenizer (base → plain text, instruct → chat format),
+  so Llama/Qwen instruct paths are unchanged.
+- **Dropped seed response.** The no-chat-format branch of `prepare_ci` tokenized only the
+  question and **silently discarded `seed_response`** (`"Answer:"`). The trace then targeted
+  the token right after the bare question — a newline — instead of the intended answer, so
+  the top neurons came out as question-structure / formatting neurons that promote `\n\n`
+  and ` A`, **not** the Dallas→Texas→Austin recall circuit. Fixed by concatenating
+  `question + " " + seed_response` in the no-chat path.
+
+**Consequence:** any Gemma circuit traced *before* these fixes is invalid (wrong target).
+Re-trace after pulling, then sanity-check that the top neurons' `output_contributions`
+actually promote answer-relevant tokens (e.g. a state/capital), not `\n\n`/` A`.
+
+**Verify the model can even do the task in this format.** `prep.py --verbose` prints, per
+prompt, `question seed -> <top predicted token>`. If base Gemma doesn't predict the capital
+after `"… ? Answer:"`, the traced circuit won't be a capital-recall circuit no matter how
+correct the attribution is — consider a completion-style prompt (e.g. `"The capital of the
+state containing Dallas is"`) that matches how the base model actually continues text.
+
 ---
 
 ## 2. "Prompt → top-N MLP neurons" (lightweight, no text)
@@ -236,16 +263,35 @@ token-summed features to the per-token graph nodes/edges by `(layer, neuron)`.
 
 ## Important caveats for whoever picks this up
 
-- **Not yet run end-to-end on a GPU.** All new files byte-compile and the data-flow was
-  verified against ADAG's source, but the dev box couldn't install torch/transformers. Run
-  `tests/test_gemma2_attribution.py` (needs CUDA + downloads `google/gemma-2-2b`) first to
-  confirm tracing correctness, then the workflow above.
-- `google/gemma-2-2b` is a **base** model. The single-prompt helpers default to
-  `use_chat_format=False`; the full pipeline (`prep.py` / `convert_inputs_to_circuits`) uses
-  the tokenizer's chat template.
+- **Run end-to-end on a GPU (RunPod, `google/gemma-2-2b`).** `prep.py` traces 50 capitals
+  prompts and `batch_export_neurons.py` writes the per-graph JSON successfully. The base-model
+  prompting fixes in §1b were needed to get there.
+- **The completeness test (`tests/test_gemma2_attribution.py`) is still unverified.** It has
+  its own shape bug: it pairs one `focus_position` with `k` `focus_logits` (the core expects
+  a `(B, P)` pairing — see `circuits/tracing/clja.py:162-167`). Patch the call to repeat the
+  position to match the logits before trusting it:
+  `focus_positions=[last_pos] * len(focus_tokens[0])`. The same bug is in
+  `scripts/circuit_prep/top_neurons.py` (`tgt_tokens=[max(keep_pos)]` should repeat `k`
+  times, as the blessed `trace.py:441` path does). Until this test passes, attribution
+  *correctness* (as opposed to "the pipeline runs") is not yet certified.
+- **Sanity-check the circuit, not just that it ran.** After the §1b fixes, confirm the top
+  neurons' `output_contributions` promote answer-relevant tokens (a state/capital), not
+  `\n\n`/` A`. If they don't, the model isn't doing capital recall in this prompt format
+  (see §1b — consider a completion-style prompt).
 - The softcapping fix assumes the installed `transformers` routes `Gemma2Attention` through
   the `ALL_ATTENTION_FUNCTIONS["noqk"]` dispatch (the same mechanism the existing Llama/Qwen
   path relies on). If the completeness test passes, that assumption held.
 - `ci_idx` in the export aligns with the order prompts were traced in (the dataset module's
   list order).
+
+## Viewing the graphs (and why the sidebar text fails)
+
+`Circuit.serve()` / `scripts/case_studies/capitals/serve_circuit.py --model-id
+google/gemma-2-2b` renders the graph topology in the circuit-tracer frontend. The
+**feature-detail sidebar will error** (`visState.feature is null`): it tries to fetch
+per-neuron cards from a remote feature store (`huggingface.co/.../features/...` → 401,
+CloudFront `features/google/gemma-2-2b/*.json` → 403) that **does not host raw Gemma MLP
+neurons** — only SAE/transcoder features. The graph still renders; the text snippets live
+only in the export JSON (`highlighted_text`, `top_input_tokens`, `output_contributions`),
+which is computed from the traced prompts, not a hosted corpus. Use the JSON for text.
 ```
