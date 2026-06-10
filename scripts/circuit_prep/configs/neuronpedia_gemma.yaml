@@ -1,0 +1,14 @@
+# Neuronpedia graph prompts — circuit preparation for Gemma 2 2B (base model).
+# Dataset module: scripts/circuit_prep/data/neuronpedia.py (regenerate the prompts
+# with: python custom_automation/fetch_neuronpedia_prompts.py).
+dataset: neuronpedia
+output_path: results/case_studies/neuronpedia_circuit.pkl
+model-id: google/gemma-2-2b
+# Gemma uses a coarser attribution scale than Llama (see THRESHOLD_RANGE_MAPPING in
+# circuits/utils/constants.py), so start with a looser pruning cutoff than Llama's 0.005.
+percentage_threshold: 0.01
+# These prompts are short (<= ~12 tokens), so batch_size 4 fits a 10 GB card; lower to
+# 1-2 only if you hit OOM.
+batch_size: 4
+k: 5
+verbose: true

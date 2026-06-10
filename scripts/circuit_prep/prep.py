@@ -284,7 +284,14 @@ def main():
             args.k,
             apply_blacklist,
         )
-        config = _make_adag_config(args, apply_blacklist, "cuda")
+        device = "cuda" if num_gpus > 0 else "cpu"
+        if device == "cpu":
+            logger.warning(
+                "No CUDA GPU detected — tracing on CPU. This works but is slow; a single "
+                "consumer GPU (e.g. RTX 3080) or a RunPod box is much faster for Step 1. "
+                "Steps 2-5 (export/describe/group/view) are CPU-only and unaffected."
+            )
+        config = _make_adag_config(args, apply_blacklist, device)
         data = convert_inputs_to_circuits(
             model,
             tokenizer,

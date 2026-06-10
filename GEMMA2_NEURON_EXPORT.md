@@ -316,20 +316,58 @@ that sidesteps the broken frontend sidebar entirely.
   python generate_description.py --graphs-dir ../capitals_neuron_graphs/
   ```
 
-- **`custom_automation/render_report.py`** — self-contained HTML report. **This is
-  the workaround for the dead frontend sidebar.** Per neuron it renders the
-  highlighted activating text (`<mark>` on the activating tokens), the driver
-  tokens, the promoted (green) / suppressed (red) output tokens, and — once
-  `generate_description.py` has run — the LLM label. No server, no remote feature
-  store, no 401/403. Open the `.html` in any browser or `scp` it back.
+- **`custom_automation/render_report.py`** — self-contained **interactive** viewer, a
+  local stand-in for the circuit-tracer frontend (the **workaround for the dead
+  feature-text sidebar**), mirroring its two-section layout:
+  - **Attribution graph (top)** — **every neuron** as a node, positioned by token (x)
+    and layer (y), colored by its supernode, with the pruned attribution edges;
+    Embeddings (layer -1) and Output (top layer) drawn as squares.
+  - **Subgraph (middle)** — the collapsed view: one box per **supernode with its
+    member neurons listed inside**, plus separate **Embeddings** and **Output** nodes,
+    and aggregated attribution edges between them.
+  - **Detail (right)** — clicking any node / neuron shows its **activation text**:
+    highlighted activating tokens (`<mark>`), per-token input attribution shading
+    (green +/red −), promoted/suppressed output tokens, and the LLM label. Untracked
+    nodes (not in the exported top-N) show their raw attribution/activation instead.
+
+  A top-left dropdown switches prompts; un-grouped graphs put every neuron under a
+  single "All neurons" node. All inlined (SVG + vanilla JS) — no server, no CDN, no
+  remote feature store, no 401/403. Open the `.html` directly, `scp` it back, run with
+  `--serve` (serves localhost + opens a browser), or `python -m http.server 8041`.
 
   ```bash
   python render_report.py --graph ../capitals_neuron_graphs/graph_0000_austin.json --out dallas.html
   python render_report.py --graphs-dir ../capitals_neuron_graphs/ --out capitals_report.html
   ```
 
+- **`custom_automation/generate_supernodes.py`** — the grouping step. Clusters the
+  described MLP neurons of each `graph_*.json` into **supernodes** with an LLM
+  (gpt-5-mini), in place, mirroring `generate_description.py`'s CLI. Three phases:
+  (1) discover groups from the top-K most influential features, (2) assign the rest
+  in concurrent batches, (3) reconcile — merge duplicates, fix misassignments, drop
+  grammar/noise groups. Reads each neuron's `generated_description` + `attribution`;
+  a feature id is `L{layer}_N{neuron}_{polarity}` (same id `generate_description.py`
+  uses). Only the described MLP neurons are grouped — embedding (`layer == -1`) and
+  logit nodes are left out, since the exported `nodes` carry no token strings /
+  probabilities. Writes back into the graph JSON: `supernodes`
+  (`{group_name: [feature_id, ...]}`, ordered by total influence), `ungrouped`, and a
+  `group` field on each neuron.
+
+  ```bash
+  cd custom_automation
+  export OPENAI_API_KEY=sk-...
+  # one graph, or a whole folder (writes groups into the JSON)
+  python generate_supernodes.py --graph ../capitals_neuron_graphs/graph_0000_austin.json
+  python generate_supernodes.py --graphs-dir ../capitals_neuron_graphs/
+  ```
+
+  Knobs live in `custom_automation/config.py` (the shared pipeline config):
+  `GROUPING_MODEL`, `GROUPING_VARIANT` (a0–a3 prompt strictness; default a2),
+  `GROUPING_TOP_K_SEED`, `GROUPING_BATCH_SIZE`, `GROUPING_MAX_CONCURRENCY` — each
+  overridable via the matching env var.
+
   Typical flow: `batch_export_neurons.py` -> `generate_description.py` ->
-  `render_report.py` -> read the report to verify the descriptions are sensible,
-  then (next) a grouping step to cluster neurons into supernodes comparable to the
-  transcoder supernodes.
+  `generate_supernodes.py` -> `render_report.py` -> read the report to verify the
+  descriptions and groupings are sensible. The supernodes are the ADAG-side analogue
+  of the transcoder supernodes.
 ```

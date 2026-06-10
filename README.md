@@ -309,6 +309,109 @@ See `scripts/case_studies/sensitivity_analysis/3_describe_and_correlate.py` for 
 8_make_steering_table.py       LaTeX table for paper
 ```
 
+## Neuronpedia graph prompts (Gemma 2 2B, end-to-end)
+
+A ready-made set of **base-model completion prompts** taken from public Neuronpedia
+attribution graphs for `google/gemma-2-2b`, plus the full pipeline that traces them,
+exports per-prompt MLP neurons + text, describes each neuron, and groups the neurons
+into supernodes. See [GEMMA2_NEURON_EXPORT.md](GEMMA2_NEURON_EXPORT.md) for the
+Gemma 2 tracing fixes and the export/description/grouping scripts.
+
+The graph list lives in `custom_automation/prompts/neuronpedia_graphs.csv` (`slug,
+share_url, notes`). `fetch_neuronpedia_prompts.py` fetches each slug's **canonical
+prompt** from the Neuronpedia graph API
+(`https://www.neuronpedia.org/api/graph/gemma-2-2b/<slug>`) — more reliable than
+parsing the note — strips the leading `<bos>`, and regenerates the dataset module
+`scripts/circuit_prep/data/neuronpedia.py` (already checked in, so you can skip
+step 0 unless the CSV changes).
+
+### Prompts
+
+| # | slug | prompt | answer |
+|---|------|--------|--------|
+| 0 | gemma-G | `The International Advanced Security Group (IAS` | G |
+| 1 | gemma-addition | `3 + 5 = ` | 8 |
+| 2 | gemma-addition2 | `2 + 1 = ` | 3 |
+| 3 | gemma-basket | `Fait: Michael Jordan joue au` | basket |
+| 4 | gemma-dollar | `Mexico:peso :: US:` | dollar |
+| 5 | gemma-english | `Mexico:Spanish :: US:` | English |
+| 6 | gemma-euro | `Mexico:peso :: Europe:` | euro |
+| 7 | gemma-girl-is | `The girl that the teacher sees` | is |
+| 8 | gemma-girls-are | `The girls that the teacher sees` | are |
+| 9 | gemma-gp-nps | `The guitarist knew the song` | . / is |
+| 10 | gemma-keys-cabinet | `The keys on the cabinet` | are |
+| 11 | gemma-michael-jordan | `Fact: Michael Jordan plays the sport of` | basketball |
+| 12 | gemma-michael-jordan-es | `Hecho: Michael Jordan juega al` | baloncesto |
+| 13 | gemma-saison | `La saison après le printemps s'apelle l'` | été |
+| 14 | gemma-verano | `La estación después de la primavera se llama el` | verano |
+
+Prompts are stored with `<bos>` stripped (the tokenizer re-adds it) and trailing
+spaces preserved, so tracing reproduces Neuronpedia's target token. gemma-2-2b is a
+base model, so `seed_responses` are empty and the trace targets the model's own
+next-token prediction; `labels` are the slugs, so each exported graph file maps back
+to its source Neuronpedia graph. The `answer` column is documentation only.
+
+### Run the pipeline
+
+```bash
+# 0. (optional) refresh prompts from Neuronpedia — needs network, regenerates
+#    scripts/circuit_prep/data/neuronpedia.py + prompts/neuronpedia_prompts.json
+python custom_automation/fetch_neuronpedia_prompts.py
+
+# 1. Trace all 15 prompts at once → one CircuitData pickle (GPU; ~5 GB in bf16).
+uv run python scripts/circuit_prep/prep.py --config configs/neuronpedia_gemma.yaml
+#    sanity-check (with verbose) that each "prompt seed -> <top token>" matches the answer.
+
+# 2. Export per-graph top-N MLP neurons + text (tokenizer-only, no GPU).
+uv run python scripts/circuit_prep/batch_export_neurons.py \
+    --circuit results/case_studies/neuronpedia_circuit.pkl \
+    --model-id google/gemma-2-2b --dataset neuronpedia \
+    --top-n 30 --mode per-prompt --out-dir neuronpedia_neuron_graphs/
+#    -> neuronpedia_neuron_graphs/graph_0000_gemma_g.json, graph_0001_gemma_addition.json, ...
+
+# 3-4. Describe each neuron, then group neurons into supernodes. --graphs-dir loops
+#      over every prompt, so this covers all 15 in one call each (in place).
+cd custom_automation
+export OPENAI_API_KEY=sk-...
+python generate_description.py  --graphs-dir ../neuronpedia_neuron_graphs/
+python generate_supernodes.py   --graphs-dir ../neuronpedia_neuron_graphs/   # --top-k-seed N to retune Phase 1
+
+# 5. Local interactive HTML viewer (circuit-tracer style). Top: the full attribution
+#    graph — every neuron as a node (token x layer), colored by supernode, with edges.
+#    Middle "Subgraph": one box per supernode with its member neurons listed inside,
+#    plus separate Embeddings/Output nodes. Right: detail panel — click any node to see
+#    that neuron's activation text. The top-left dropdown switches prompts.
+python render_report.py --graphs-dir ../neuronpedia_neuron_graphs/ --out neuronpedia_report.html
+```
+
+View the report (it is a self-contained file — no Neuronpedia push, no metadata
+update, fully local):
+
+```powershell
+# one step — render AND serve on localhost, opens the browser for you
+cd custom_automation
+python render_report.py --graphs-dir ../neuronpedia_neuron_graphs/ --out neuronpedia_report.html --serve --port 8041
+# -> http://localhost:8041/neuronpedia_report.html
+
+# the report is self-contained (data inlined, nothing fetched), so you can also just
+# open the file directly — no server needed:
+start neuronpedia_report.html
+# or serve a folder manually (e.g. for remote/RunPod via SSH port-forward):
+python -m http.server 8041   # then http://localhost:8041/neuronpedia_report.html
+```
+
+`render_report.py` only reads the `graph_*.json` files. Click a box in the subgraph
+to jump to that supernode's neurons. (Don't confuse this with
+`scripts/case_studies/.../serve_circuit.py`, which launches the circuit-tracer
+frontend — that renders topology but its feature-text sidebar 401/403s for Gemma
+neurons; the HTML report is the workaround that shows the text.)
+
+Each `graph_*.json` ends up self-contained: the pruned attribution graph (`nodes`,
+`edges`), the curated top-N `neurons` (with `generated_description`), and the
+`supernodes` grouping. The Neuronpedia ground-truth (transcoder) supernodes are
+encoded in the `share_url` of each CSV row and mirrored in
+`prompts/ground_truth_neuronpedia.csv` for comparison.
+
 ## Performance
 
 Benchmarked on H100 80GB with Llama-3.1-8B-Instruct (capitals, 50 prompts, k=5):
