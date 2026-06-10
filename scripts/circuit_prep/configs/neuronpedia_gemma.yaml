@@ -7,8 +7,9 @@ model-id: google/gemma-2-2b
 # Gemma uses a coarser attribution scale than Llama (see THRESHOLD_RANGE_MAPPING in
 # circuits/utils/constants.py), so start with a looser pruning cutoff than Llama's 0.005.
 percentage_threshold: 0.01
-# These prompts are short (<= ~12 tokens), so batch_size 4 fits a 10 GB card; lower to
-# 1-2 only if you hit OOM.
-batch_size: 4
+# These prompts are short (<= ~12 tokens). On a 24 GB GPU (RTX 4090) you can trace the
+# whole set in ~2 batches — set this to 8 (or up to 15 for all-at-once). Lower to 1-2
+# only on a small card or if you hit OOM.
+batch_size: 8
 k: 5
 verbose: true
