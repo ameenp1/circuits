@@ -283,7 +283,11 @@ def get_all_pairs_cl_ja_effects_with_attributions(
         if percentage_threshold is not None:
             print(f"PERCENTAGE THRESHOLD {percentage_threshold:.2%}")
         if absolute_attribution_threshold is not None:
-            print(f"ABSOLUTE ATTRIBUTION THRESHOLD {absolute_attribution_threshold.item():.5f}")
+            _aat = absolute_attribution_threshold
+            _aat = _aat.float().mean().item() if hasattr(_aat, "numel") and _aat.numel() > 1 else (
+                _aat.item() if hasattr(_aat, "item") else _aat
+            )
+            print(f"ABSOLUTE ATTRIBUTION THRESHOLD {_aat:.5f}")
 
     # get important neurons for each layer (same as original)
     neuron_cfg: dict[int, list[list[int]]] = {
