@@ -4,15 +4,17 @@
 dataset: neuronpedia
 output_path: results/case_studies/neuronpedia_circuit.pkl
 model-id: google/gemma-2-2b
-# Pruning: mimic neuronpedia / circuit-tracer cumulative-influence pruning — keep the
-# smallest set of neurons that together cover this fraction of total attribution mass.
-# 0.7 matches neuronpedia's pruning threshold. This governs pruning; when it is set,
-# percentage_threshold is ignored (model-agnostic 0..1 scale, so no Gemma rescaling needed).
-node_attribution_threshold: 0.7
-# The all-pairs attribution backward is memory-heavy (more so with the 0.7 cumulative
-# prune, which keeps more neurons), so batch_size is about VRAM, not prompt length.
-# On a 24 GB card use 2 (4 may fit with PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True);
-# go higher only on an A100/H100. Override per-run with --batch-size.
-batch_size: 2
+# Pruning: keep MLP neurons whose |attribution| is at least this fraction of the target
+# logit (a magnitude prune). This is the prune ADAG is built around and yields a sparse,
+# tractable graph. Raise it to keep fewer neurons, lower it to keep more.
+#
+# NOTE: do NOT use node_attribution_threshold (neuronpedia's cumulative 0.7) here. In ADAG
+# that selects tens of thousands of raw MLP neurons for per-neuron Jacobian attribution,
+# which OOMs and runs for hours even on a 48 GB card. Neuronpedia's 0.7 prunes a sparse
+# transcoder-feature graph (a different universe), so the number does not transfer.
+percentage_threshold: 0.01
+# With the magnitude prune the surviving neuron set is small, so this is cheap: batch_size
+# 4 fits a 24 GB card and 8+ fits a 48 GB RTX 6000 Ada. Override per-run with --batch-size.
+batch_size: 4
 k: 5
 verbose: true
