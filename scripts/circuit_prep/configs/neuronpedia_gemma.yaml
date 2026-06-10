@@ -9,9 +9,10 @@ model-id: google/gemma-2-2b
 # 0.7 matches neuronpedia's pruning threshold. This governs pruning; when it is set,
 # percentage_threshold is ignored (model-agnostic 0..1 scale, so no Gemma rescaling needed).
 node_attribution_threshold: 0.7
-# These prompts are short (<= ~12 tokens). On a 24 GB GPU (RTX 4090) you can trace the
-# whole set in ~2 batches — set this to 8 (or up to 15 for all-at-once). Lower to 1-2
-# only on a small card or if you hit OOM.
-batch_size: 8
+# The all-pairs attribution backward is memory-heavy (more so with the 0.7 cumulative
+# prune, which keeps more neurons), so batch_size is about VRAM, not prompt length.
+# On a 24 GB card use 2 (4 may fit with PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True);
+# go higher only on an A100/H100. Override per-run with --batch-size.
+batch_size: 2
 k: 5
 verbose: true
