@@ -294,4 +294,42 @@ CloudFront `features/google/gemma-2-2b/*.json` → 403) that **does not host raw
 neurons** — only SAE/transcoder features. The graph still renders; the text snippets live
 only in the export JSON (`highlighted_text`, `top_input_tokens`, `output_contributions`),
 which is computed from the traced prompts, not a hosted corpus. Use the JSON for text.
+
+## 4. Annotation pipeline + local viewer (`custom_automation/`)
+
+A small annotation pipeline that consumes the exported `graph_*.json` directly,
+mirroring the transcoder-side description/grouping flow, plus a local HTML viewer
+that sidesteps the broken frontend sidebar entirely.
+
+- **`custom_automation/generate_description.py`** — LLM descriptions for each MLP
+  neuron. Builds the evidence block from ADAG's own fields
+  (`prompt` -> context, `highlighted_text` with `{{...}}` rewritten to `<<<...>>>`,
+  `top_input_tokens` -> drivers, signed `output_contributions` split into
+  promoted/suppressed) and calls GPT-5-mini for a `LABEL — elaboration` line.
+  Writes `generated_description` back into each neuron, **in place**.
+
+  ```bash
+  cd custom_automation
+  export OPENAI_API_KEY=sk-...
+  # one graph, or a whole folder (writes labels into the JSON)
+  python generate_description.py --graph ../capitals_neuron_graphs/graph_0000_austin.json
+  python generate_description.py --graphs-dir ../capitals_neuron_graphs/
+  ```
+
+- **`custom_automation/render_report.py`** — self-contained HTML report. **This is
+  the workaround for the dead frontend sidebar.** Per neuron it renders the
+  highlighted activating text (`<mark>` on the activating tokens), the driver
+  tokens, the promoted (green) / suppressed (red) output tokens, and — once
+  `generate_description.py` has run — the LLM label. No server, no remote feature
+  store, no 401/403. Open the `.html` in any browser or `scp` it back.
+
+  ```bash
+  python render_report.py --graph ../capitals_neuron_graphs/graph_0000_austin.json --out dallas.html
+  python render_report.py --graphs-dir ../capitals_neuron_graphs/ --out capitals_report.html
+  ```
+
+  Typical flow: `batch_export_neurons.py` -> `generate_description.py` ->
+  `render_report.py` -> read the report to verify the descriptions are sensible,
+  then (next) a grouping step to cluster neurons into supernodes comparable to the
+  transcoder supernodes.
 ```
