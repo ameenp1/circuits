@@ -169,7 +169,12 @@ def prepare_ci(
         if has_seed or is_empty_seed:
             _strip_starting_at_rindex_in_place(token_ids, tokenizer.eos_token_id)
     else:
-        token_ids = tokenizer(question)["input_ids"]
+        # No chat template (base models, e.g. google/gemma-2-2b): concatenate the
+        # question and the seed response as plain text. Without this the seed
+        # ("Answer:") is dropped, so the trace targets the token after the bare
+        # question (a newline) instead of the intended answer.
+        text = question + " " + seed_response if has_seed else question
+        token_ids = tokenizer(text)["input_ids"]
 
     if seed_response is not None and seed_response.endswith(" "):
         space_token = tokenizer.encode(" ")[1]
