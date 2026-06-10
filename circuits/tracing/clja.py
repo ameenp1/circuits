@@ -276,7 +276,7 @@ def get_all_pairs_cl_ja_effects_with_attributions(
     if verbose:
         print("global important neurons mask", global_important_neurons_mask.shape)
         print("TOTAL NEURONS", global_important_neurons_mask.sum().item())
-        print(f"GOAL VALUE {goal_value.item():.5f}")
+        print(f"GOAL VALUE {goal_value.sum().item():.5f}")
         print(f"EMBED SUM {embed_final_attributions.sum().item():.5f}")
         for layer in range(len(model.model.layers)):
             print(f"LAYER {layer} ATTR {mlp_final_attributions[layer].sum().item():.5f}")
