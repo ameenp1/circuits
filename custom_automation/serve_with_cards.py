@@ -56,59 +56,88 @@ def _split_logits(contribs):
     return [t for t, _ in pos], [t for t, _ in neg]
 
 
-def build_card_store(graphs_dir: Path) -> dict[tuple[int, int], dict]:
-    """(layer, neuron) -> frontend feature-card dict. Keeps the highest-|attr| occurrence."""
-    store: dict[tuple[int, int], dict] = {}
-    best_attr: dict[tuple[int, int], float] = {}
+def _card_from_neuron(n: dict) -> dict | None:
+    """Build one frontend feature-card from a single ADAG neuron (this prompt only)."""
+    tokens = n.get("tokens") or []
+    acts = [float(a) for a in (n.get("attr_activations") or [])]
+    if not tokens:
+        return None
+    top_logits, bottom_logits = _split_logits(n.get("output_contributions"))
+    train_idx = max(range(len(acts)), key=lambda i: acts[i]) if acts else 0
+    return {
+        "act_min": 0,
+        "act_max": max(acts) if acts else 1.0,
+        "examples_quantiles": [
+            {
+                "quantile_name": "Activation on this prompt",
+                "examples": [
+                    {"tokens": tokens, "tokens_acts_list": acts, "train_token_ind": train_idx}
+                ],
+            }
+        ],
+        "top_logits": top_logits[:10],
+        "bottom_logits": bottom_logits[:10],
+    }
+
+
+def build_per_prompt_stores(graphs_dir: Path) -> dict[str, dict[tuple[int, int], dict]]:
+    """prompt-string -> {(layer, neuron): card}, recomputed per prompt (no pooling)."""
+    stores: dict[str, dict[tuple[int, int], dict]] = {}
     files = sorted(graphs_dir.glob("graph_*.json"))
     for fp in files:
         graph = json.loads(fp.read_text(encoding="utf-8"))
+        prompt = graph.get("prompt", "")
+        d: dict[tuple[int, int], dict] = {}
         for n in graph.get("neurons", []):
-            key = (int(n["layer"]), int(n["neuron"]))
-            attr = abs(float(n.get("attribution", 0.0)))
-            if key in best_attr and attr <= best_attr[key]:
-                continue
-            tokens = n.get("tokens") or []
-            acts = [float(a) for a in (n.get("attr_activations") or [])]
-            if not tokens:
-                continue
-            top_logits, bottom_logits = _split_logits(n.get("output_contributions"))
-            train_idx = max(range(len(acts)), key=lambda i: acts[i]) if acts else 0
-            store[key] = {
-                "act_min": 0,
-                "act_max": max(acts) if acts else 1.0,
-                "examples_quantiles": [
-                    {
-                        "quantile_name": "Activating example",
-                        "examples": [
-                            {
-                                "tokens": tokens,
-                                "tokens_acts_list": acts,
-                                "train_token_ind": train_idx,
-                            }
-                        ],
-                    }
-                ],
-                "top_logits": top_logits[:10],
-                "bottom_logits": bottom_logits[:10],
-            }
-            best_attr[key] = attr
-    log.info("Card store: %d neurons from %d graph file(s) in %s", len(store), len(files), graphs_dir)
-    return store
+            card = _card_from_neuron(n)
+            if card is not None:
+                d[(int(n["layer"]), int(n["neuron"]))] = card
+        stores[prompt] = d
+    log.info("Per-prompt stores: %d prompts from %s", len(stores), graphs_dir)
+    return stores
 
 
 # ---------------------------------------------------------------------------
-# Patch the one endpoint, then serve the real frontend unchanged
+# Patch the one endpoint + track which prompt graph is being viewed
 # ---------------------------------------------------------------------------
 
-def install_local_card_endpoint(store: dict[tuple[int, int], dict]) -> None:
+def install_local_card_endpoint(stores: dict[str, dict[tuple[int, int], dict]]) -> None:
+    import os
     import urllib.parse
 
     import circuits.frontend.server as fe
 
     Base = fe.CircuitGraphHandler
+    ordered_prompts = list(stores.keys())
+    state = {"prompt": ordered_prompts[0] if ordered_prompts else None}
+
+    def _store_for_current() -> dict:
+        return stores.get(state["prompt"], {})
 
     class LocalCardHandler(Base):  # type: ignore[valid-type,misc]
+        def do_GET(self) -> None:  # noqa: D401
+            # Learn the current prompt from the graph the frontend just loaded.
+            path = self.path.split("?")[0]
+            if "/graph_data/" in path and path.endswith(".json"):
+                fn = path.split("/graph_data/")[-1]
+                gpath = os.path.join(getattr(self, "data_dir", ""), fn)
+                try:
+                    if os.path.exists(gpath):
+                        meta = json.load(open(gpath, encoding="utf-8")).get("metadata", {})
+                        p = meta.get("prompt", "")
+                        # Exact match, else best-effort by trailing slug index (circuit_<i>).
+                        if p in stores:
+                            state["prompt"] = p
+                        else:
+                            stem = fn.rsplit(".", 1)[0]
+                            if "_" in stem and stem.rsplit("_", 1)[1].isdigit():
+                                idx = int(stem.rsplit("_", 1)[1])
+                                if 0 <= idx < len(ordered_prompts):
+                                    state["prompt"] = ordered_prompts[idx]
+                except Exception:  # noqa: BLE001
+                    pass
+            return super().do_GET()
+
         def _handle_neuron_exemplars(self) -> None:  # noqa: D401
             params = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
             try:
@@ -116,9 +145,8 @@ def install_local_card_endpoint(store: dict[tuple[int, int], dict]) -> None:
                 neuron = int(params.get("neuron", [None])[0])
             except (TypeError, ValueError):
                 return super()._handle_neuron_exemplars()
-            card = store.get((layer, neuron))
+            card = _store_for_current().get((layer, neuron))
             if card is None:
-                # Not in the exported top-N; fall back to the default (Modal) path.
                 return super()._handle_neuron_exemplars()
             body = json.dumps(card).encode()
             self.send_response(200)
@@ -128,7 +156,7 @@ def install_local_card_endpoint(store: dict[tuple[int, int], dict]) -> None:
             self.wfile.write(body)
 
     fe.CircuitGraphHandler = LocalCardHandler
-    log.info("Patched /api/neuron_exemplars to serve local ADAG cards.")
+    log.info("Patched: per-prompt cards, current prompt tracked from /graph_data requests.")
 
 
 def main() -> None:
@@ -139,14 +167,14 @@ def main() -> None:
     ap.add_argument("--port", type=int, default=8041)
     args = ap.parse_args()
 
-    # Build the card store BEFORE importing/patching the server.
-    store = build_card_store(args.graphs_dir)
+    # Build per-prompt stores BEFORE importing/patching the server.
+    stores = build_per_prompt_stores(args.graphs_dir)
 
     from transformers import AutoConfig, AutoTokenizer
 
     from circuits.analysis.circuit_ops import Circuit
 
-    install_local_card_endpoint(store)
+    install_local_card_endpoint(stores)
 
     log.info("Loading circuit %s", args.circuit)
     c = Circuit.load_from_pickle(str(args.circuit))

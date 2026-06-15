@@ -1,0 +1,8 @@
+# Single Dallas prompt on Gemma 2 2B (base model) — traces ONE graph, fast.
+dataset: dallas
+output_path: results/case_studies/dallas_gemma_circuit.pkl
+model-id: google/gemma-2-2b
+percentage_threshold: 0.01
+batch_size: 1
+k: 5
+verbose: false
