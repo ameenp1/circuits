@@ -1,5 +1,9 @@
 .env
 
+# custom_automation: downloaded transcoder data + generated cross-graph reports
+custom_automation/np_data/
+custom_automation/cross_graph_out/
+
 # data/ (keep committed datasets, ignore generated data)
 notebooks/
 results/

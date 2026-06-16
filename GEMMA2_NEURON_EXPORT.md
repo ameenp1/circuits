@@ -370,4 +370,54 @@ that sidesteps the broken frontend sidebar entirely.
   `generate_supernodes.py` -> `render_report.py` -> read the report to verify the
   descriptions and groupings are sensible. The supernodes are the ADAG-side analogue
   of the transcoder supernodes.
+
+## 5. Cross-graph analysis — MLP (ADAG) vs SLT (transcoder) (`custom_automation/`)
+
+Compares the ADAG MLP attribution graph against the cross-layer-**transcoder** (SLT)
+graph for the *same* neuronpedia prompt. The transcoder side (graphs + supernodes +
+descriptions) is pulled from the HF dataset
+`circuit-tracer-automation/pipeline_automation` (`gemma-2/neuronpedia/`); the MLP side
+is the `graph_*.json` produced by the §4 pipeline.
+
+- **`custom_automation/fetch_neuronpedia_artifacts.py`** — downloads the transcoder
+  side for all 15 neuronpedia slugs into `custom_automation/np_data/`
+  (`test_graphs/<slug>.json`, `artifacts/<slug>__feature_groups_v2_a2.json`,
+  `artifacts/<slug>__feature_descriptions_v2.json`). Uses `curl --ssl-no-revoke`
+  (Windows schannel revocation workaround).
+
+  ```bash
+  python custom_automation/fetch_neuronpedia_artifacts.py
+  ```
+
+- **`custom_automation/cross_graph_analysis.py`** — the comparison itself, producing a
+  per-slug JSON + Markdown report (and a cross-slug summary) covering three things:
+  - **A. Structural differences** — feature counts, node types (the transcoder graph
+    has a `mlp reconstruction error` basis the MLP graph lacks), edge density, layer
+    distribution, supernode count, and grouped fraction.
+  - **B. Supernode composition (both vs one type)** — one unified concept set built by
+    matching MLP↔transcoder supernodes on group **name + member-description**
+    similarity (identical a2 names are force-matched), classifying each concept as
+    **BOTH** / **MLP-only** / **transcoder-only**.
+  - **C. Agreement vs divergence** — per-matched-concept name/member similarity,
+    promoted-token Jaccard, layer overlap, and feature-level nearest-neighbour
+    coverage in both directions.
+
+  Matching uses OpenAI `text-embedding-3-small` when `OPENAI_API_KEY` is set, else a
+  deterministic offline TF-IDF fallback (`--embed {auto,openai,tfidf}`).
+
+  ```bash
+  # one slug (transcoder side auto-resolved from --np-dir)
+  python custom_automation/cross_graph_analysis.py --slug gemma-dollar \
+      --mlp-graph ../neuronpedia_mlp_graphs/graph_0004_gemma-dollar.json
+  # a whole folder of ADAG graphs (one per slug) + a summary
+  python custom_automation/cross_graph_analysis.py \
+      --mlp-dir ../neuronpedia_mlp_graphs --np-dir custom_automation/np_data
+  # no MLP graphs yet? synthesize a stand-in from the transcoder side to preview the
+  # report shape end-to-end (clearly labelled SYNTHETIC):
+  python custom_automation/cross_graph_analysis.py --demo-mlp --embed tfidf
+  ```
+
+  Output: `cross_graph_out/<slug>__cross_graph.{json,md}` + `cross_graph_summary.md`.
+  The MLP `graph_*.json` is a drop-in — point `--mlp-dir` at the Runpod export and the
+  same three analyses run on real attributions.
 ```

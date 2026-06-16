@@ -354,8 +354,14 @@ to its source Neuronpedia graph. The `answer` column is documentation only.
 ### Run the pipeline
 
 ```bash
-# 0. (optional) refresh prompts from Neuronpedia — needs network, regenerates
-#    scripts/circuit_prep/data/neuronpedia.py + prompts/neuronpedia_prompts.json
+# 0. One-time setup. A .env file MUST exist (env_util loads it on import; the export /
+#    describe / group steps import it even though they don't use the DB). Placeholders
+#    are fine — only OPENAI_API_KEY matters later, and an exported env var overrides it.
+cp .env.template .env
+export HF_TOKEN=hf_...            # gemma-2-2b is gated
+
+# 0b. (optional) refresh prompts from Neuronpedia — needs network, regenerates
+#     scripts/circuit_prep/data/neuronpedia.py + prompts/neuronpedia_prompts.json
 python custom_automation/fetch_neuronpedia_prompts.py
 
 # 1. Trace all 15 prompts at once → one CircuitData pickle (GPU; ~5 GB in bf16).
