@@ -28,6 +28,7 @@ import argparse
 import asyncio
 import json
 import logging
+import os
 import sys
 from pathlib import Path
 
@@ -38,6 +39,13 @@ log = logging.getLogger(__name__)
 
 MODEL = "gpt-5-mini"
 CONCURRENCY_LIMIT = 50
+
+# Activation-text window — the MLP analogue of Neuronpedia's pre-windowed exemplars.
+# Raw gemma MLP neurons have no hosted corpus exemplars, so instead of fetching we slice
+# the traced tokens to ±WINDOW_RADIUS around the peak-activation token (the rest is cut
+# with "…"). No-op for short prompts (the window covers the whole thing). Env-overridable;
+# CLI --window-radius wins.
+WINDOW_RADIUS = int(os.environ.get("GENDESC_WINDOW_RADIUS", "16"))
 
 # ---------------------------------------------------------------------------
 # System prompt (the transcoder pipeline's default v2 variant, verbatim)
@@ -99,6 +107,40 @@ def _neuron_id(n: dict) -> str:
 def _adag_highlight_to_markers(text: str) -> str:
     """ADAG marks activating tokens with {{...}}; convert to the <<<...>>> the prompt expects."""
     return text.replace("{{", "<<<").replace("}}", ">>>")
+
+
+def _windowed_activation(neuron: dict, radius: int | None = None) -> str:
+    """Neuronpedia-style activating snippet: ±radius tokens around the peak-activation token,
+    with the top-3 activating tokens in the window delimited by <<<>>> and truncated context
+    marked with "…". Mirrors the reference transcoder path (examples[:5] kept whole context +
+    top-3 triggers) — except an MLP neuron has exactly one traced occurrence, so it's one window.
+
+    Falls back to the full highlighted_text ({{}}→<<<>>>) when per-token activations are
+    missing or length-mismatched.
+    """
+    if radius is None:
+        radius = WINDOW_RADIUS
+    tokens = neuron.get("tokens") or []
+    acts = neuron.get("attr_activations") or []
+    if not tokens or len(acts) != len(tokens):
+        return _adag_highlight_to_markers(neuron.get("highlighted_text", "")) or "(none)"
+    try:
+        acts = [float(a) for a in acts]
+    except (TypeError, ValueError):
+        return _adag_highlight_to_markers(neuron.get("highlighted_text", "")) or "(none)"
+
+    peak = max(range(len(acts)), key=lambda i: acts[i])
+    lo = max(0, peak - radius)
+    hi = min(len(tokens), peak + radius + 1)
+    win_tokens, win_acts = tokens[lo:hi], acts[lo:hi]
+    triggers = set(sorted(range(len(win_acts)), key=lambda i: win_acts[i], reverse=True)[:3])
+
+    body = "".join(f"<<<{t}>>>" if i in triggers else t for i, t in enumerate(win_tokens))
+    if lo > 0:
+        body = "… " + body
+    if hi < len(tokens):
+        body = body + " …"
+    return body
 
 
 def _split_contributions(contribs: list) -> tuple[list[str], list[str]]:
