@@ -92,6 +92,34 @@ for _s in (sys.stdout, sys.stderr):
 
 
 # ===========================================================================
+# Evidence-regime caveat — emitted at the top of every report (analysis (c))
+# ===========================================================================
+# The two sides' descriptions are built from DIFFERENT evidence, so a divergence
+# in (B)/(C) can be a method artifact rather than a representational difference.
+# This banner makes that explicit so results aren't over-read before corpus
+# raw-activation exemplars exist (see CORPUS_EXEMPLARS_SPEC.md).
+EVIDENCE_REGIME_CAVEAT = (
+    "> ⚠️ **Evidence-regime caveat — read before interpreting divergences.**\n"
+    "> The two sides' `generated_description` text — the key this analysis matches on —\n"
+    "> is built from **different evidence**, so a divergence below may be a *method\n"
+    "> artifact*, not a real representational difference:\n"
+    ">\n"
+    "> - **MLP (ADAG):** per-prompt, **input-attribution** window — the tokens that drove\n"
+    ">   this neuron on *this* prompt. One example, no corpus.\n"
+    "> - **Transcoder (SLT):** corpus-wide, **raw-activation** max-activating exemplars —\n"
+    ">   the feature's global selectivity. Many examples.\n"
+    ">\n"
+    "> Two axes differ at once (corpus-vs-per-prompt AND activation-vs-attribution).\n"
+    "> Separately, transcoder latents are sparse/near-monosemantic by construction while\n"
+    "> raw MLP neurons are polysemantic, so MLP descriptions are legitimately vaguer —\n"
+    "> surface that as a finding, don't read it as failure. Until corpus raw-activation\n"
+    "> exemplars exist for the traced neurons (CORPUS_EXEMPLARS_SPEC.md), treat the\n"
+    "> BOTH / MLP-only / transcoder-only splits and agree/diverge numbers as\n"
+    "> **hypotheses**, not conclusions."
+)
+
+
+# ===========================================================================
 # Normalized representation
 # ===========================================================================
 
@@ -601,6 +629,8 @@ def render_markdown(rep: dict) -> str:
         for k, v in rep["notes"].items():
             P(f"> ⚠️ {k}: {v}")
     P("")
+    P(EVIDENCE_REGIME_CAVEAT)
+    P("")
 
     P("## A. Structural differences")
     P("")
@@ -713,6 +743,7 @@ def write_summary(reports: list[dict], out_dir: Path) -> None:
     if not reports:
         return
     L = ["# Cross-graph analysis — summary", "",
+         EVIDENCE_REGIME_CAVEAT, "",
          "| slug | MLP feats | tc feats | both | MLP-only | tc-only | MLP→tc cov | tc→MLP cov |",
          "|---|---:|---:|---:|---:|---:|---:|---:|"]
     for r in reports:
