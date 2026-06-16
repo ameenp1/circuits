@@ -56,11 +56,12 @@ SYSTEM_PROMPT = (
 
     "You will receive three types of evidence:\n"
     "1. Overall Prompt Context: the original prompt the model was processing.\n"
-    "2. Input Activations: text excerpts where the neuron activated strongly. The most relevant "
-    "tokens are delimited by <<<>>>.\n"
+    "2. Input Attribution: the prompt text with the tokens that most drove this neuron's effect "
+    "on the output delimited by <<<>>>. These are input-attribution scores (how strongly each token "
+    "drove this neuron's contribution to the output on this prompt), NOT raw activation strength.\n"
     "3. Global Output Tokens: tokens this neuron tends to push toward or away from in the output.\n\n"
 
-    "Use input activations as the primary evidence. Use prompt context only for disambiguation, "
+    "Use the input-attribution evidence as primary. Use prompt context only for disambiguation, "
     "not as proof by itself. Output tokens can be noisy — only factor them in when they show a "
     "clear, consistent pattern. A tight cluster of specific promoted tokens (e.g. one city, one "
     "state) outranks a broader category label — prefer the specific entity.\n\n"
@@ -161,9 +162,8 @@ def build_user_prompt(neuron: dict, prompt_text: str) -> str:
     lines.append("--- OVERALL PROMPT CONTEXT ---")
     lines.append(prompt_text)
 
-    lines.append("\n--- INPUT ACTIVATIONS ---")
-    highlighted = _adag_highlight_to_markers(neuron.get("highlighted_text", "")) or "(none)"
-    lines.append(f"Excerpt 1: {highlighted}")
+    lines.append("\n--- INPUT ATTRIBUTION (tokens that most drove this neuron in this prompt; <<<>>> = strongest) ---")
+    lines.append(f"Excerpt 1: {_windowed_activation(neuron)}")
     drivers = [t for t, _ in (neuron.get("top_input_tokens") or [])[:8]]
     if drivers:
         lines.append(f"Strongest driver tokens (by input attribution): {', '.join(drivers)}")
