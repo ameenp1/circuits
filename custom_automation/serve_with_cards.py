@@ -98,6 +98,24 @@ def build_descriptions(graphs_dir: Path) -> dict[tuple[int, int], str]:
     return descs
 
 
+def build_supernode_map(graphs_dir: Path) -> dict[tuple[int, int], str]:
+    """(layer, neuron) -> supernode group name, from generate_supernodes.py's per-neuron `group`.
+
+    Pooled across graphs (first non-Ungrouped wins). Fed into Circuit._cluster_map so
+    export_to_circuit_tracer renders these as the frontend's supernode boxes. Empty if
+    generate_supernodes.py hasn't been run (then the frontend just shows no supernodes).
+    """
+    groups: dict[tuple[int, int], str] = {}
+    for fp in sorted(graphs_dir.glob("graph_*.json")):
+        graph = json.loads(fp.read_text(encoding="utf-8"))
+        for n in graph.get("neurons", []):
+            g = (n.get("group") or "").strip()
+            if g and g != "Ungrouped":
+                groups.setdefault((int(n["layer"]), int(n["neuron"])), g)
+    log.info("Supernodes: %d neurons grouped from %s", len(groups), graphs_dir)
+    return groups
+
+
 def build_per_prompt_stores(graphs_dir: Path) -> dict[str, dict[tuple[int, int], dict]]:
     """prompt-string -> {(layer, neuron): card}, recomputed per prompt (no pooling)."""
     stores: dict[str, dict[tuple[int, int], dict]] = {}
@@ -193,6 +211,7 @@ def main() -> None:
     # Build per-prompt stores BEFORE importing/patching the server.
     stores = build_per_prompt_stores(args.graphs_dir)
     descriptions = build_descriptions(args.graphs_dir)
+    supernodes = build_supernode_map(args.graphs_dir)
 
     from transformers import AutoConfig, AutoTokenizer
 
@@ -208,6 +227,19 @@ def main() -> None:
     # Inject generated descriptions as node labels (clerp -> node label + sidebar header).
     for (layer, neuron), desc in descriptions.items():
         c.neuron_label_cache[(layer, neuron)] = desc
+
+    # Inject supernodes as the circuit's cluster map -> frontend supernode boxes.
+    # export_to_circuit_tracer reads only nid.layer/nid.neuron and uses the group name
+    # verbatim as the box label (it's non-digit, so no "Cluster N" relabeling).
+    if supernodes:
+        from circuits.analysis.cluster import NeuronId
+
+        c._cluster_map = {
+            NeuronId(layer=layer, token=0, neuron=neuron, polarity="+"): group
+            for (layer, neuron), group in supernodes.items()
+        }
+        c._cluster_summary_labels = {}   # ensure the raw group name is the box label
+        c._cluster_descriptions = {}
 
     server = c.serve(port=args.port)
     log.info("Real frontend on port %d (sidebar served from local ADAG cards). Ctrl+C to stop.", args.port)
