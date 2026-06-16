@@ -112,6 +112,9 @@ def install_local_card_endpoint(stores: dict[str, dict[tuple[int, int], dict]]) 
     state = {"prompt": ordered_prompts[0] if ordered_prompts else None}
 
     def _store_for_current() -> dict:
+        # Single-prompt circuit: no matching can fail — always use the one store.
+        if len(stores) == 1:
+            return next(iter(stores.values()))
         return stores.get(state["prompt"], {})
 
     class LocalCardHandler(Base):  # type: ignore[valid-type,misc]
@@ -147,7 +150,9 @@ def install_local_card_endpoint(stores: dict[str, dict[tuple[int, int], dict]]) 
                 return super()._handle_neuron_exemplars()
             card = _store_for_current().get((layer, neuron))
             if card is None:
+                log.info("L%dN%d: MISS (not in store for this prompt) -> Modal/Llama fallback", layer, neuron)
                 return super()._handle_neuron_exemplars()
+            log.info("L%dN%d: HIT local card (top=%s)", layer, neuron, card.get("top_logits", [])[:4])
             body = json.dumps(card).encode()
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
