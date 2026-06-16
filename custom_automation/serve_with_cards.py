@@ -80,6 +80,24 @@ def _card_from_neuron(n: dict) -> dict | None:
     }
 
 
+def build_descriptions(graphs_dir: Path) -> dict[tuple[int, int], str]:
+    """(layer, neuron) -> generated_description, pooled across graphs (first non-empty wins).
+
+    Populated into Circuit.neuron_label_cache so export_to_circuit_tracer sets node.clerp,
+    which the frontend shows as BOTH the graph node label and the sidebar header (ppClerp).
+    """
+    descs: dict[tuple[int, int], str] = {}
+    for fp in sorted(graphs_dir.glob("graph_*.json")):
+        graph = json.loads(fp.read_text(encoding="utf-8"))
+        for n in graph.get("neurons", []):
+            d = (n.get("generated_description") or "").strip()
+            if not d or d == "Error generating description":
+                continue
+            descs.setdefault((int(n["layer"]), int(n["neuron"])), d)
+    log.info("Descriptions: %d neurons labeled from %s", len(descs), graphs_dir)
+    return descs
+
+
 def build_per_prompt_stores(graphs_dir: Path) -> dict[str, dict[tuple[int, int], dict]]:
     """prompt-string -> {(layer, neuron): card}, recomputed per prompt (no pooling)."""
     stores: dict[str, dict[tuple[int, int], dict]] = {}
@@ -174,6 +192,7 @@ def main() -> None:
 
     # Build per-prompt stores BEFORE importing/patching the server.
     stores = build_per_prompt_stores(args.graphs_dir)
+    descriptions = build_descriptions(args.graphs_dir)
 
     from transformers import AutoConfig, AutoTokenizer
 
@@ -185,6 +204,10 @@ def main() -> None:
     c = Circuit.load_from_pickle(str(args.circuit))
     num_layers = AutoConfig.from_pretrained(args.model_id).num_hidden_layers
     c.set_tokenizer(AutoTokenizer.from_pretrained(args.model_id), num_layers=num_layers)
+
+    # Inject generated descriptions as node labels (clerp -> node label + sidebar header).
+    for (layer, neuron), desc in descriptions.items():
+        c.neuron_label_cache[(layer, neuron)] = desc
 
     server = c.serve(port=args.port)
     log.info("Real frontend on port %d (sidebar served from local ADAG cards). Ctrl+C to stop.", args.port)
