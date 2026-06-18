@@ -80,40 +80,95 @@ def _card_from_neuron(n: dict) -> dict | None:
     }
 
 
-def build_descriptions(graphs_dir: Path) -> dict[tuple[int, int], str]:
-    """(layer, neuron) -> generated_description, pooled across graphs (first non-empty wins).
+def build_per_prompt_annotations(
+    graphs_dir: Path,
+) -> tuple[dict[str, dict[tuple[int, int], dict]], list[dict[tuple[int, int], dict]]]:
+    """prompt-string -> {(layer, neuron): {"group", "desc"}}, plus the same maps in file order.
 
-    Populated into Circuit.neuron_label_cache so export_to_circuit_tracer sets node.clerp,
-    which the frontend shows as BOTH the graph node label and the sidebar header (ppClerp).
+    PER-PROMPT, no pooling: the same neuron legitimately belongs to a different supernode
+    (and carries a different description) in a different prompt's graph. Pooling these into
+    one global map makes every prompt's groups bleed onto every graph — which is exactly the
+    bug this avoids. Used to rewrite each exported circuit_<i>.json individually.
     """
-    descs: dict[tuple[int, int], str] = {}
+    prompt_to_map: dict[str, dict[tuple[int, int], dict]] = {}
+    ordered: list[dict[tuple[int, int], dict]] = []
     for fp in sorted(graphs_dir.glob("graph_*.json")):
         graph = json.loads(fp.read_text(encoding="utf-8"))
-        for n in graph.get("neurons", []):
-            d = (n.get("generated_description") or "").strip()
-            if not d or d == "Error generating description":
-                continue
-            descs.setdefault((int(n["layer"]), int(n["neuron"])), d)
-    log.info("Descriptions: %d neurons labeled from %s", len(descs), graphs_dir)
-    return descs
-
-
-def build_supernode_map(graphs_dir: Path) -> dict[tuple[int, int], str]:
-    """(layer, neuron) -> supernode group name, from generate_supernodes.py's per-neuron `group`.
-
-    Pooled across graphs (first non-Ungrouped wins). Fed into Circuit._cluster_map so
-    export_to_circuit_tracer renders these as the frontend's supernode boxes. Empty if
-    generate_supernodes.py hasn't been run (then the frontend just shows no supernodes).
-    """
-    groups: dict[tuple[int, int], str] = {}
-    for fp in sorted(graphs_dir.glob("graph_*.json")):
-        graph = json.loads(fp.read_text(encoding="utf-8"))
+        m: dict[tuple[int, int], dict] = {}
         for n in graph.get("neurons", []):
             g = (n.get("group") or "").strip()
+            d = (n.get("generated_description") or "").strip()
+            if d == "Error generating description":
+                d = ""
+            m[(int(n["layer"]), int(n["neuron"]))] = {"group": g, "desc": d}
+        prompt_to_map[graph.get("prompt", "")] = m
+        ordered.append(m)
+    log.info("Per-prompt annotations: %d prompts from %s", len(ordered), graphs_dir)
+    return prompt_to_map, ordered
+
+
+def rewrite_graph_data_per_prompt(
+    data_dir: Path,
+    prompt_to_map: dict[str, dict[tuple[int, int], dict]],
+    ordered_maps: list[dict[tuple[int, int], dict]],
+    num_layers: int,
+) -> None:
+    """Set each exported circuit_<i>.json's supernodes + node labels from ITS prompt only.
+
+    The graph nodes are already per-prompt (the export is per ci); we only replace the
+    pooled qParams.supernodes / node.clerp with the per-prompt assignment so the boxes on
+    graph i show graph i's groups, not the union of all 15.
+    """
+    logit_prefix = str(num_layers + 1)
+    for fp in sorted(data_dir.glob("circuit_*.json")):
+        data = json.loads(fp.read_text(encoding="utf-8"))
+        prompt = data.get("metadata", {}).get("prompt", "")
+        pm = prompt_to_map.get(prompt)
+        if pm is None:  # fall back to file index (circuit_<i> <-> i-th ADAG graph)
+            stem = fp.stem
+            if "_" in stem and stem.rsplit("_", 1)[1].isdigit():
+                idx = int(stem.rsplit("_", 1)[1])
+                if 0 <= idx < len(ordered_maps):
+                    pm = ordered_maps[idx]
+        if not pm:
+            continue
+
+        groups: dict[str, list[str]] = {}
+        for node in data.get("nodes", []):
+            nid = str(node.get("node_id", ""))
+            if nid.startswith("E_"):
+                continue
+            parts = nid.split("_")
+            if len(parts) < 3 or not parts[0].isdigit() or parts[0] == logit_prefix:
+                continue
+            try:
+                key = (int(parts[0]), int(parts[1]))
+            except ValueError:
+                continue
+            info = pm.get(key)
+            if not info:
+                continue
+            if info.get("desc"):
+                node["clerp"] = info["desc"]
+            g = info.get("group")
             if g and g != "Ungrouped":
-                groups.setdefault((int(n["layer"]), int(n["neuron"])), g)
-    log.info("Supernodes: %d neurons grouped from %s", len(groups), graphs_dir)
-    return groups
+                groups.setdefault(g, []).append(nid)
+
+        grouped_ids = {i for ids in groups.values() for i in ids}
+        pinned = set(grouped_ids)
+        # also pin embedding / logit nodes linked to a grouped node (matches export behavior)
+        for link in data.get("links", []):
+            s, t = str(link.get("source", "")), str(link.get("target", ""))
+            if s in grouped_ids or t in grouped_ids:
+                for end in (s, t):
+                    if end.startswith("E_") or end.split("_")[0] == logit_prefix:
+                        pinned.add(end)
+
+        qp = data.setdefault("qParams", {})
+        qp["supernodes"] = [[g, *ids] for g, ids in sorted(groups.items(), key=lambda kv: -len(kv[1]))]
+        qp["pinnedIds"] = list(pinned)
+        fp.write_text(json.dumps(data), encoding="utf-8")
+    log.info("Rewrote per-prompt supernodes/labels into %d graphs.", len(list(data_dir.glob("circuit_*.json"))))
 
 
 def build_per_prompt_stores(graphs_dir: Path) -> dict[str, dict[tuple[int, int], dict]]:
@@ -210,12 +265,14 @@ def main() -> None:
 
     # Build per-prompt stores BEFORE importing/patching the server.
     stores = build_per_prompt_stores(args.graphs_dir)
-    descriptions = build_descriptions(args.graphs_dir)
-    supernodes = build_supernode_map(args.graphs_dir)
+    prompt_to_map, ordered_maps = build_per_prompt_annotations(args.graphs_dir)
+
+    import tempfile
 
     from transformers import AutoConfig, AutoTokenizer
 
     from circuits.analysis.circuit_ops import Circuit
+    from circuits.frontend.server import serve as _serve
 
     install_local_card_endpoint(stores)
 
@@ -224,25 +281,15 @@ def main() -> None:
     num_layers = AutoConfig.from_pretrained(args.model_id).num_hidden_layers
     c.set_tokenizer(AutoTokenizer.from_pretrained(args.model_id), num_layers=num_layers)
 
-    # Inject generated descriptions as node labels (clerp -> node label + sidebar header).
-    for (layer, neuron), desc in descriptions.items():
-        c.neuron_label_cache[(layer, neuron)] = desc
+    # Export the graphs ourselves, then rewrite supernodes + labels PER PROMPT (so each
+    # graph shows only its own groups), then serve that dir. This replaces c.serve(), whose
+    # single global cluster_map made every prompt's supernodes appear on every graph.
+    temp_dir = Path(tempfile.mkdtemp(prefix="circuit_tracer_"))
+    c.export_to_circuit_tracer(str(temp_dir), slug="circuit")
+    rewrite_graph_data_per_prompt(temp_dir, prompt_to_map, ordered_maps, num_layers)
 
-    # Inject supernodes as the circuit's cluster map -> frontend supernode boxes.
-    # export_to_circuit_tracer reads only nid.layer/nid.neuron and uses the group name
-    # verbatim as the box label (it's non-digit, so no "Cluster N" relabeling).
-    if supernodes:
-        from circuits.analysis.cluster import NeuronId
-
-        c._cluster_map = {
-            NeuronId(layer=layer, token=0, neuron=neuron, polarity="+"): group
-            for (layer, neuron), group in supernodes.items()
-        }
-        c._cluster_summary_labels = {}   # ensure the raw group name is the box label
-        c._cluster_descriptions = {}
-
-    server = c.serve(port=args.port)
-    log.info("Real frontend on port %d (sidebar served from local ADAG cards). Ctrl+C to stop.", args.port)
+    server = _serve(data_dir=str(temp_dir), port=args.port)
+    log.info("Real frontend on port %d (per-prompt cards + supernodes). Open ?slug=circuit_0. Ctrl+C to stop.", args.port)
     try:
         while True:
             time.sleep(1)
