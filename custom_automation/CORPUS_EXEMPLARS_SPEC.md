@@ -41,10 +41,13 @@ strongest practical argument that this is required, not optional, for the compar
 intermediate). It is already Gemma-2-aware (sandwich norms via
 `_effective_norm_weight` / `_norm_eps`).
 
-→ **The harvest calls `collect_neuron_acts`.** This makes "corpus activation = the exact
-quantity ADAG attributes" true *by construction*, and inherits tokenization/BOS handling
-for free. This collapses the former highest-risk item (custom hook) and the tokenization
-item to zero.
+→ **The harvest uses the SAME `down_proj`-input hook** (`cache[l] = inp[0].detach()`) —
+verified byte-identical to `collect_neuron_acts:84-88`. (It does NOT literally *call*
+`collect_neuron_acts`, which also builds unembed/norm machinery we don't need for raw-act
+capture; the neuron capture itself is architecture-agnostic.) Because it's not a literal
+call, the "by construction" guarantee is replaced by an **explicit A2 check**: in a small
+fp32 validation pass, assert the harvested `(layer,token,neuron)` value ≈ `df_node['activation']`
+from a real trace (tolerance, since the full run is bf16). Not auto-run — do it once.
 
 ### R2. Polarity = sign of the activation
 `circuits/analysis/cluster.py:140`:
@@ -157,11 +160,24 @@ VERIFIED for **gemma-2-2b** gemmascope dashboards (Neuronpedia + SAEDashboard
   (`SAE.from_pretrained("gemma-scope-2b-pt-res-canonical",...).cfg.metadata`):
   `prepend_bos = True`, `dataset_path = monology/pile-uncopyrighted`. Each 128-token context
   starts with `<bos>`. `shuffle_tokens=True`. Base gemma-2-2b, no chat template.
-- **Window = 128 (NOT 1024):** the SAE metadata's `context_size = 1024` is the SAE's
-  **training** context — NOT the exemplar window. The exemplar/display window is
-  SAEDashboard's `n_tokens_in_prompt = 128` (verified from the runner config AND
-  Neuronpedia's published 36,864×128 figure). Harvest at **128**.
-- **Banding:** 20 top + 5 quantile bands × 5 (verified).
+- **THREE different lengths — do not confuse them:**
+  1. `context_size = 1024` — the SAE's **training** context (irrelevant).
+  2. `n_tokens_in_prompt = 128` — the **forward prompt** SAEDashboard runs to compute
+     activations. We forward at 128 (acts need full context).
+  3. **The EXPORTED exemplar window ≈ 35 tokens** — SAEDashboard crops each example to
+     `peak ± buffer` before display/export. **This is what the SLT *descriptions* were
+     actually built from** (`fetch_all_activation_text.py:210` joins the hosted exemplar's
+     cropped `tokens`). MEASURED from the real `feature_descriptions_v2.json` you downloaded:
+     ~150 chars / ~35 tokens median, max ~231 chars. **NOT 128.**
+  → Harvest **forwards 128** but **EXPORTS `peak ± buffer` (~33 tokens, `--buffer 16`)** so
+  the MLP descriptions see the same context length as the SLT descriptions. Matching 128
+  would feed MLP ~4× more context → re-introduces the asymmetry. Set `--buffer` to match the
+  measured SLT token-length median.
+- **Mask BOS from the peak.** Gemma MLP neurons fire hugely on `<bos>` (attention sink); the
+  peak search skips position 0 so exemplars don't all peak on `<bos>`.
+- **Eager attention.** Load gemma-2-2b with `attn_implementation="eager"` (Gemma-2 SDPA
+  diverges from the dashboard forward due to softcapping).
+- **Banding:** 20 top + 5 quantile bands × 5, `linspace(0,max)` (verified).
 
 ## Remaining open / to-verify
 - **OPEN-1: exact quantile *interval definition*.** Count (5×5) verified; *how* SAEDashboard
@@ -281,9 +297,12 @@ Every one of these is a claim that, if wrong, silently corrupts the comparison.
 2. **BOS/tokenization.** Confirm `prepend_bos=True` and `dataset_path=monology/pile-uncopyrighted`
    from the SLT SAE cfg (`SAE.from_pretrained(...).cfg.metadata`). Confirm the harvest prepends
    `<bos>` as token 0 of every 128-context.
-3. **Window = 128, not 1024.** The SAE cfg `context_size=1024` is *training* context. The
-   exemplar window is SAEDashboard `n_tokens_in_prompt=128`. Confirm the SLT exemplars the
-   descriptions used are 128 tokens (count tokens in a raw hosted feature example).
+3. **Exported window length matches the SLT EXEMPLARS, not the 128 prompt.** The SLT
+   *descriptions* were built from cropped `peak ± buffer` windows (~35 tokens), NOT the
+   128-token forward prompt and NOT the 1024 training context. **Measure it:** token-length
+   distribution of the `context`/`tokens` fields in the downloaded
+   `feature_descriptions_v2.json` (or a raw hosted feature). Confirm the harvest exports
+   `peak ± buffer` with `buffer` set to ≈ that median, and forwards 128 only for activations.
 4. **Budget = 4.7M, matched.** 36,864 × 128. Not 10M. Confirm the harvest scans exactly this.
 5. **Banding == SAEDashboard.** 20 TOP (top-k) + 5 bands × 5, bins `linspace(0, max)`.
    Confirm the harvest's band edges and per-band counts match.

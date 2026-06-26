@@ -123,22 +123,33 @@ class NeuronState:
 # 4. Card assembly (frontend schema)
 # ---------------------------------------------------------------------------
 
-def _example(tokenizer, contexts: np.ndarray, ex) -> dict:
-    ctx_max, ctx_idx, pos, acts = ex
-    ids = contexts[ctx_idx].tolist()
+def _example(tokenizer, contexts: np.ndarray, ex, buffer: int) -> dict:
+    """Crop to peak ± buffer to MATCH the SLT exported exemplar window.
+
+    The SLT descriptions were built from cropped windows (~35 tokens, measured from
+    feature_descriptions_v2.json), NOT the 128-token forward prompt. We forward 128 for
+    correct activations but export only peak ± buffer so both sides describe from the same
+    amount of context.
+    """
+    _ctx_max, ctx_idx, pos, acts = ex
+    ids = contexts[ctx_idx]
+    lo = max(0, pos - buffer)
+    hi = min(len(ids), pos + buffer + 1)
+    win_ids = ids[lo:hi].tolist()
+    win_acts = acts[lo:hi]
     return {
-        "tokens": [tokenizer.decode([i]) for i in ids],
-        "tokens_acts_list": [round(float(a), 4) for a in acts.astype(np.float32)],
-        "train_token_ind": int(pos),
+        "tokens": [tokenizer.decode([i]) for i in win_ids],
+        "tokens_acts_list": [round(float(a), 4) for a in win_acts.astype(np.float32)],
+        "train_token_ind": int(pos - lo),
     }
 
 
-def build_card(tokenizer, contexts, st: NeuronState, n_quantiles: int, q_group: int) -> dict | None:
+def build_card(tokenizer, contexts, st: NeuronState, n_quantiles: int, q_group: int, buffer: int) -> dict | None:
     if not st.top:
         return None  # dead -> omit (fail loud)
     max_act = max(e[0] for e in st.top)
     top_sorted = sorted(st.top, key=lambda e: -e[0])[: st.top_k]
-    bands = [{"quantile_name": "TOP", "examples": [_example(tokenizer, contexts, e) for e in top_sorted]}]
+    bands = [{"quantile_name": "TOP", "examples": [_example(tokenizer, contexts, e, buffer) for e in top_sorted]}]
     edges = np.linspace(0.0, max_act, n_quantiles + 1)
     for b in range(n_quantiles):
         lo, hi = float(edges[b]), float(edges[b + 1])
@@ -150,7 +161,7 @@ def build_card(tokenizer, contexts, st: NeuronState, n_quantiles: int, q_group: 
         sample.sort(key=lambda e: -e[0])
         bands.append({
             "quantile_name": f"INTERVAL {lo:.3f}-{hi:.3f}",
-            "examples": [_example(tokenizer, contexts, e) for e in sample],
+            "examples": [_example(tokenizer, contexts, e, buffer) for e in sample],
         })
     return {"act_min": 0, "act_max": round(float(max_act), 4), "examples_quantiles": bands}
 
@@ -170,7 +181,11 @@ def harvest(args) -> None:
     contexts = build_contexts(args.dataset, tok, args.context, args.n_prompts)
 
     dtype = {"bf16": torch.bfloat16, "fp16": torch.float16, "fp32": torch.float32}[args.dtype]
-    model = AutoModelForCausalLM.from_pretrained(args.model_id, torch_dtype=dtype).to(args.device).eval()
+    # eager attention: Gemma-2 SDPA can diverge from the standard/dashboard forward because of
+    # attention softcapping — match the dashboard by forcing eager.
+    model = AutoModelForCausalLM.from_pretrained(
+        args.model_id, torch_dtype=dtype, attn_implementation="eager"
+    ).to(args.device).eval()
 
     # state[(layer, neuron, pol)] -> NeuronState
     state: dict[tuple[int, int, str], NeuronState] = {}
@@ -182,45 +197,52 @@ def harvest(args) -> None:
     # per-layer column index of the traced neurons (gather only those columns)
     cols = {layer: torch.tensor(neurons, device=args.device) for layer, neurons in union.items()}
 
+    # register the down_proj hooks ONCE (identical capture to collect_neuron_acts utils.py:84-88)
+    cache: dict[int, torch.Tensor] = {}
+    handles = []
+    for layer in collect_layers:
+        def hook(m, inp, out, _l=layer):  # input to down_proj == the neuron value
+            cache[_l] = inp[0].detach()
+        handles.append(model.model.layers[layer].mlp.down_proj.register_forward_hook(hook))
+
     n = len(contexts)
-    for start in range(0, n, args.batch_size):
-        batch_idx = list(range(start, min(start + args.batch_size, n)))
-        ids = torch.tensor(contexts[batch_idx], dtype=torch.long, device=args.device)
-        cache: dict[int, torch.Tensor] = {}
-        handles = []
-        for layer in collect_layers:
-            def hook(m, inp, out, _l=layer):  # input to down_proj == the neuron value (utils.py:84-88)
-                cache[_l] = inp[0].detach()
-            handles.append(model.model.layers[layer].mlp.down_proj.register_forward_hook(hook))
-        with torch.no_grad():
-            model(input_ids=ids, attention_mask=torch.ones_like(ids))
+    try:
+        for start in range(0, n, args.batch_size):
+            batch_idx = list(range(start, min(start + args.batch_size, n)))
+            ids = torch.tensor(contexts[batch_idx], dtype=torch.long, device=args.device)
+            with torch.no_grad():
+                model(input_ids=ids, attention_mask=torch.ones_like(ids))
+
+            for layer in collect_layers:
+                acts = cache[layer].index_select(2, cols[layer]).float()  # [B, T, n_traced]
+                for pol, sign in (("+", 1.0), ("-", -1.0)):
+                    pacts = acts * sign                                   # polarity activation (>0 = fires)
+                    peak_src = pacts.clone()
+                    peak_src[:, 0, :] = float("-inf")                     # mask BOS (attention-sink) from the peak
+                    ctx_max, ctx_pos = peak_src.max(dim=1)               # [B, n_traced]
+                    cm = ctx_max.cpu().numpy()
+                    cp = ctx_pos.cpu().numpy()
+                    pa = pacts.cpu().numpy().astype(np.float16)          # [B, T, n_traced]
+                    for j, nidx in enumerate(union[layer]):
+                        st = state[(layer, nidx, pol)]
+                        for bi, ctx_i in enumerate(batch_idx):
+                            v = float(cm[bi, j])
+                            if v <= 0.0:                                 # didn't fire for this polarity
+                                continue
+                            # .copy() — pa[bi,:,j] is a VIEW that would pin the whole batch array
+                            st.add(v, ctx_i, int(cp[bi, j]), pa[bi, :, j].copy())
+            if (start // args.batch_size) % 20 == 0:
+                print(f"  {min(start + args.batch_size, n)}/{n} contexts")
+    finally:
         for h in handles:
             h.remove()
-
-        for layer in collect_layers:
-            acts = cache[layer].index_select(2, cols[layer]).float()  # [B, T, n_traced]
-            for pol, sign in (("+", 1.0), ("-", -1.0)):
-                pacts = (acts * sign)                                  # polarity activation (>0 = fires)
-                ctx_max, ctx_pos = pacts.max(dim=1)                    # [B, n_traced]
-                cm = ctx_max.cpu().numpy()
-                cp = ctx_pos.cpu().numpy()
-                pa = pacts.cpu().numpy().astype(np.float16)            # [B, T, n_traced]
-                for j, nidx in enumerate(union[layer]):
-                    st = state[(layer, nidx, pol)]
-                    for bi, ctx_i in enumerate(batch_idx):
-                        v = float(cm[bi, j])
-                        if v <= 0.0:                                   # didn't fire for this polarity
-                            continue
-                        st.add(v, ctx_i, int(cp[bi, j]), pa[bi, :, j])
-        if (start // args.batch_size) % 20 == 0:
-            print(f"  {min(start + args.batch_size, n)}/{n} contexts")
 
     # 6. assemble + coverage
     store: dict[str, dict] = {}
     cov = {"+": [0, 0], "-": [0, 0]}  # [with_exemplars, total]
     for (layer, nidx, pol), st in state.items():
         cov[pol][1] += 1
-        card = build_card(tok, contexts, st, args.n_quantiles, args.quantile_group_size)
+        card = build_card(tok, contexts, st, args.n_quantiles, args.quantile_group_size, args.buffer)
         if card is not None:
             store[f"L{layer}_N{nidx}_{pol}"] = card
             cov[pol][0] += 1
@@ -249,7 +271,11 @@ def main() -> None:
     ap.add_argument("--model-id", default="google/gemma-2-2b")
     ap.add_argument("--dataset", default="monology/pile-uncopyrighted")  # verified == SLT
     ap.add_argument("--n-prompts", type=int, default=36864)              # verified == SLT (×128 = 4.7M)
-    ap.add_argument("--context", type=int, default=128)                  # verified == SLT exemplar window
+    ap.add_argument("--context", type=int, default=128)                  # forward prompt length (acts need full context)
+    ap.add_argument("--buffer", type=int, default=16,                     # EXPORTED window = peak ± buffer (~33 tokens)
+                    help="tokens each side of the peak in the EXPORTED exemplar. Match the SLT "
+                         "exemplar length: measure tokens-per-context in feature_descriptions_v2.json "
+                         "and set buffer≈(median-1)/2. ~16 ≈ the measured ~35-token SLT windows.")
     ap.add_argument("--top-k", type=int, default=20)                     # verified == SAEDashboard
     ap.add_argument("--n-quantiles", type=int, default=5)                # verified == SAEDashboard
     ap.add_argument("--quantile-group-size", type=int, default=5)        # verified == SAEDashboard

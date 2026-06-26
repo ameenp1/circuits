@@ -2,25 +2,26 @@
 generate_description.py — LLM descriptions for ADAG MLP-neuron graphs.
 
 Adapts the transcoder-pipeline description step to ADAG's exported neuron JSON
-(one graph_*.json per prompt, produced by batch_export_neurons.py). For each
-neuron it builds an evidence block from ADAG's own fields:
+(one graph_*.json per prompt, produced by batch_export_neurons.py). The evidence
+block is built in the SAME format the transcoder pipeline uses, so the two sides'
+descriptions are comparable:
 
-  - prompt              -> OVERALL PROMPT CONTEXT
-  - highlighted_text    -> INPUT ACTIVATIONS (the {{...}} markers become <<<...>>>)
-  - top_input_tokens    -> the driver tokens
-  - output_contributions-> GLOBAL OUTPUT TOKENS (split into promoted / suppressed by sign)
+  - prompt                 -> OVERALL PROMPT CONTEXT
+  - corpus exemplars       -> INPUT ACTIVATIONS (mlp_exemplars.json, harvested by
+                              harvest_corpus_exemplars.py; up to 10 excerpts, examples[:5]
+                              from the TOP band, top-3 triggers in <<<>>>) — the SLT-matched
+                              raw-activation text, NOT the per-prompt attribution window
+  - output_contributions   -> GLOBAL OUTPUT TOKENS (split into promoted / demoted by sign)
 
 …then calls GPT-5-mini for a `LABEL -- elaboration` description, exactly as the
 transcoder pipeline does. The description is written back into each neuron as
-`generated_description`, in place, so render_report.py can show text + label
-together (working around the broken frontend feature panel).
+`generated_description`, in place. Neurons with no corpus exemplars (dead/uncovered)
+get an empty INPUT ACTIVATIONS block — fail loud, no per-prompt fallback.
 
 Usage:
     export OPENAI_API_KEY=sk-...
-    # one graph
-    python generate_description.py --graph ../capitals_neuron_graphs/graph_0000_austin.json
-    # a whole folder (writes back in place)
-    python generate_description.py --graphs-dir ../capitals_neuron_graphs/
+    python generate_description.py --graphs-dir ../neuronpedia_neuron_graphs/ \
+        --exemplars custom_automation/np_data/mlp_exemplars.json
 """
 from __future__ import annotations
 
@@ -28,7 +29,6 @@ import argparse
 import asyncio
 import json
 import logging
-import os
 import sys
 from pathlib import Path
 
@@ -40,12 +40,10 @@ log = logging.getLogger(__name__)
 MODEL = "gpt-5-mini"
 CONCURRENCY_LIMIT = 50
 
-# Activation-text window — the MLP analogue of Neuronpedia's pre-windowed exemplars.
-# Raw gemma MLP neurons have no hosted corpus exemplars, so instead of fetching we slice
-# the traced tokens to ±WINDOW_RADIUS around the peak-activation token (the rest is cut
-# with "…"). No-op for short prompts (the window covers the whole thing). Env-overridable;
-# CLI --window-radius wins.
-WINDOW_RADIUS = int(os.environ.get("GENDESC_WINDOW_RADIUS", "16"))
+# Corpus raw-activation exemplars (harvest_corpus_exemplars.py), keyed "L{layer}_N{neuron}_{pol}".
+# Loaded in main(). The activating-text evidence comes from here (SLT-matched corpus windows),
+# so the MLP description prompt mirrors the transcoder pipeline's input format.
+EXEMPLARS: dict[str, dict] = {}
 
 # ---------------------------------------------------------------------------
 # System prompt (the transcoder pipeline's default v2 variant, verbatim)
@@ -56,12 +54,11 @@ SYSTEM_PROMPT = (
 
     "You will receive three types of evidence:\n"
     "1. Overall Prompt Context: the original prompt the model was processing.\n"
-    "2. Input Attribution: the prompt text with the tokens that most drove this neuron's effect "
-    "on the output delimited by <<<>>>. These are input-attribution scores (how strongly each token "
-    "drove this neuron's contribution to the output on this prompt), NOT raw activation strength.\n"
+    "2. Input Activations: text excerpts where the neuron activated strongly. The most relevant "
+    "tokens are delimited by <<<>>>.\n"
     "3. Global Output Tokens: tokens this neuron tends to push toward or away from in the output.\n\n"
 
-    "Use the input-attribution evidence as primary. Use prompt context only for disambiguation, "
+    "Use input activations as the primary evidence. Use prompt context only for disambiguation, "
     "not as proof by itself. Output tokens can be noisy — only factor them in when they show a "
     "clear, consistent pattern. A tight cluster of specific promoted tokens (e.g. one city, one "
     "state) outranks a broader category label — prefer the specific entity.\n\n"
@@ -105,43 +102,55 @@ def _neuron_id(n: dict) -> str:
     return f"L{n['layer']}_N{n['neuron']}{('_' + pol) if pol else ''}"
 
 
-def _adag_highlight_to_markers(text: str) -> str:
-    """ADAG marks activating tokens with {{...}}; convert to the <<<...>>> the prompt expects."""
-    return text.replace("{{", "<<<").replace("}}", ">>>")
+def _format_excerpt(context: str, triggers: list[str]) -> str:
+    """Wrap each trigger token in <<<>>> within context (verbatim from the transcoder pipeline)."""
+    marked = False
+    for t in triggers:
+        clean = t.strip()
+        if clean and clean in context:
+            context = context.replace(clean, f"<<<{clean}>>>", 1)
+            marked = True
+    if not marked and any(t.strip() for t in triggers):
+        context += f" [Activates on: <<<{'|'.join(t.strip() for t in triggers)}>>>]"
+    return context
 
 
-def _windowed_activation(neuron: dict, radius: int | None = None) -> str:
-    """Neuronpedia-style activating snippet: ±radius tokens around the peak-activation token,
-    with the top-3 activating tokens in the window delimited by <<<>>> and truncated context
-    marked with "…". Mirrors the reference transcoder path (examples[:5] kept whole context +
-    top-3 triggers) — except an MLP neuron has exactly one traced occurrence, so it's one window.
+def _corpus_top_activations(neuron: dict, n_windows: int = 5, n_triggers: int = 3) -> list[dict]:
+    """SLT-matched activation evidence from the harvested corpus exemplars.
 
-    Falls back to the full highlighted_text ({{}}→<<<>>>) when per-token activations are
-    missing or length-mismatched.
+    Mirrors the transcoder pipeline exactly: examples_quantiles[0].examples[:5], top-3 triggers
+    by activation, full joined context. Returns [] for neurons with no corpus exemplars
+    (dead/uncovered) — fail loud, no per-prompt fallback.
     """
-    if radius is None:
-        radius = WINDOW_RADIUS
-    tokens = neuron.get("tokens") or []
-    acts = neuron.get("attr_activations") or []
-    if not tokens or len(acts) != len(tokens):
-        return _adag_highlight_to_markers(neuron.get("highlighted_text", "")) or "(none)"
-    try:
-        acts = [float(a) for a in acts]
-    except (TypeError, ValueError):
-        return _adag_highlight_to_markers(neuron.get("highlighted_text", "")) or "(none)"
+    pol = neuron.get("polarity") or "+"
+    base = f"L{neuron['layer']}_N{neuron['neuron']}"
+    card = EXEMPLARS.get(f"{base}_{pol}") or EXEMPLARS.get(f"{base}_{'-' if pol == '+' else '+'}")
+    if not card:
+        return []
+    bands = card.get("examples_quantiles") or []
+    top = bands[0].get("examples", []) if bands else []   # TOP band == SLT examples_quantiles[0]
+    out = []
+    for ex in top[:n_windows]:
+        tokens = ex.get("tokens") or []
+        acts = ex.get("tokens_acts_list") or []
+        if acts and len(acts) == len(tokens):
+            order = sorted(range(len(acts)), key=lambda i: acts[i], reverse=True)[:n_triggers]
+            triggers = [str(tokens[i]) for i in order]
+        else:
+            triggers = []
+        out.append({"triggers": triggers, "context": "".join(str(t) for t in tokens)})
+    return out
 
-    peak = max(range(len(acts)), key=lambda i: acts[i])
-    lo = max(0, peak - radius)
-    hi = min(len(tokens), peak + radius + 1)
-    win_tokens, win_acts = tokens[lo:hi], acts[lo:hi]
-    triggers = set(sorted(range(len(win_acts)), key=lambda i: win_acts[i], reverse=True)[:3])
 
-    body = "".join(f"<<<{t}>>>" if i in triggers else t for i, t in enumerate(win_tokens))
-    if lo > 0:
-        body = "… " + body
-    if hi < len(tokens):
-        body = body + " …"
-    return body
+def _corpus_logits(neuron: dict) -> tuple[list[str] | None, list[str] | None]:
+    """(top_logits, bottom_logits) from the card's logit-weights (Fix #2, add_logit_weights.py),
+    or (None, None) if absent — the SLT-matched promote/demote lens."""
+    pol = neuron.get("polarity") or "+"
+    base = f"L{neuron['layer']}_N{neuron['neuron']}"
+    card = EXEMPLARS.get(f"{base}_{pol}") or EXEMPLARS.get(f"{base}_{'-' if pol == '+' else '+'}")
+    if card and ("top_logits" in card or "bottom_logits" in card):
+        return card.get("top_logits", []), card.get("bottom_logits", [])
+    return None, None
 
 
 def _split_contributions(contribs: list) -> tuple[list[str], list[str]]:
@@ -157,21 +166,23 @@ def _split_contributions(contribs: list) -> tuple[list[str], list[str]]:
 
 
 def build_user_prompt(neuron: dict, prompt_text: str) -> str:
+    """Compose the user turn — identical structure/format to the transcoder pipeline's."""
     lines = [f"Neuron {_neuron_id(neuron)}:\n"]
 
     lines.append("--- OVERALL PROMPT CONTEXT ---")
     lines.append(prompt_text)
 
-    lines.append("\n--- INPUT ATTRIBUTION (tokens that most drove this neuron in this prompt; <<<>>> = strongest) ---")
-    lines.append(f"Excerpt 1: {_windowed_activation(neuron)}")
-    drivers = [t for t, _ in (neuron.get("top_input_tokens") or [])[:8]]
-    if drivers:
-        lines.append(f"Strongest driver tokens (by input attribution): {', '.join(drivers)}")
+    lines.append("\n--- INPUT ACTIVATIONS ---")
+    for i, act in enumerate(_corpus_top_activations(neuron)[:10], 1):
+        triggers = act.get("triggers") or [act.get("trigger", "")]
+        lines.append(f"Excerpt {i}: {_format_excerpt(act.get('context', ''), triggers)}")
 
     lines.append("\n--- GLOBAL OUTPUT TOKENS ---")
-    promoted, suppressed = _split_contributions(neuron.get("output_contributions"))
+    promoted, suppressed = _corpus_logits(neuron)          # logit-weights (Fix #2), SLT-matched lens
+    if promoted is None and suppressed is None:             # fallback: per-prompt output_contributions
+        promoted, suppressed = _split_contributions(neuron.get("output_contributions"))
     lines.append(f"Top Promoted Tokens: {', '.join(promoted) if promoted else 'None available'}")
-    lines.append(f"Top Suppressed Tokens: {', '.join(suppressed) if suppressed else 'None available'}")
+    lines.append(f"Top Demoted Tokens: {', '.join(suppressed) if suppressed else 'None available'}")
 
     return "\n".join(lines)
 
@@ -236,7 +247,16 @@ def main() -> None:
     g = ap.add_mutually_exclusive_group(required=True)
     g.add_argument("--graph", type=Path, help="A single graph_*.json to describe.")
     g.add_argument("--graphs-dir", type=Path, help="A folder of graph_*.json to describe.")
+    ap.add_argument("--exemplars", type=Path,
+                    default=Path("custom_automation/np_data/mlp_exemplars.json"),
+                    help="Corpus exemplar store from harvest_corpus_exemplars.py (the activating text).")
     args = ap.parse_args()
+
+    if args.exemplars.exists():
+        EXEMPLARS.update(json.loads(args.exemplars.read_text(encoding="utf-8")))
+        log.info("Loaded %d corpus exemplar cards from %s", len(EXEMPLARS), args.exemplars)
+    else:
+        log.warning("No corpus exemplars at %s — INPUT ACTIVATIONS will be empty (fail loud).", args.exemplars)
 
     if args.graph:
         graphs = [args.graph]

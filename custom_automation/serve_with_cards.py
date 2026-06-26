@@ -192,7 +192,10 @@ def build_per_prompt_stores(graphs_dir: Path) -> dict[str, dict[tuple[int, int],
 # Patch the one endpoint + track which prompt graph is being viewed
 # ---------------------------------------------------------------------------
 
-def install_local_card_endpoint(stores: dict[str, dict[tuple[int, int], dict]]) -> None:
+def install_local_card_endpoint(
+    stores: dict[str, dict[tuple[int, int], dict]],
+    exemplars: dict[str, dict],
+) -> None:
     import os
     import urllib.parse
 
@@ -239,11 +242,22 @@ def install_local_card_endpoint(stores: dict[str, dict[tuple[int, int], dict]]) 
                 neuron = int(params.get("neuron", [None])[0])
             except (TypeError, ValueError):
                 return super()._handle_neuron_exemplars()
-            card = _store_for_current().get((layer, neuron))
+            # Sidebar activating text = corpus exemplars (SLT-matched), keyed by polarity;
+            # fall back to the other polarity if only one was harvested.
+            sign = params.get("sign", ["%2B"])[0]
+            pol = "-" if sign == "-" else "+"
+            other = "+" if pol == "-" else "-"
+            card = exemplars.get(f"L{layer}_N{neuron}_{pol}") or exemplars.get(f"L{layer}_N{neuron}_{other}")
             if card is None:
-                log.info("L%dN%d: MISS (not in store for this prompt) -> Modal/Llama fallback", layer, neuron)
+                log.info("L%dN%d_%s: MISS (dead/uncovered) -> Modal/Llama fallback", layer, neuron, pol)
                 return super()._handle_neuron_exemplars()
-            log.info("L%dN%d: HIT local card (top=%s)", layer, neuron, card.get("top_logits", [])[:4])
+            # Promote/demote = the card's own logit-weights (Fix #2, add_logit_weights.py) if
+            # present; else the per-prompt output_contributions for the current prompt.
+            card = dict(card)
+            pp = _store_for_current().get((layer, neuron)) or {}
+            card.setdefault("top_logits", pp.get("top_logits", []))
+            card.setdefault("bottom_logits", pp.get("bottom_logits", []))
+            log.info("L%dN%d_%s: HIT corpus exemplars (act_max=%s)", layer, neuron, pol, card.get("act_max"))
             body = json.dumps(card).encode()
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
@@ -252,7 +266,7 @@ def install_local_card_endpoint(stores: dict[str, dict[tuple[int, int], dict]]) 
             self.wfile.write(body)
 
     fe.CircuitGraphHandler = LocalCardHandler
-    log.info("Patched: per-prompt cards, current prompt tracked from /graph_data requests.")
+    log.info("Patched: corpus exemplars (sidebar text) + per-prompt promote/demote logits.")
 
 
 def main() -> None:
@@ -261,10 +275,19 @@ def main() -> None:
     ap.add_argument("--model-id", default="google/gemma-2-2b")
     ap.add_argument("--graphs-dir", type=Path, required=True, help="batch_export_neurons.py output dir.")
     ap.add_argument("--port", type=int, default=8041)
+    ap.add_argument("--exemplars", type=Path,
+                    default=Path("custom_automation/np_data/mlp_exemplars.json"),
+                    help="Corpus exemplar store from harvest_corpus_exemplars.py (the activating text).")
     args = ap.parse_args()
 
-    # Build per-prompt stores BEFORE importing/patching the server.
+    # Per-prompt stores supply promote/demote logits; the corpus store supplies the
+    # SLT-matched activating text shown in the sidebar.
     stores = build_per_prompt_stores(args.graphs_dir)
+    exemplars = json.loads(args.exemplars.read_text(encoding="utf-8")) if args.exemplars.exists() else {}
+    if exemplars:
+        log.info("Loaded %d corpus exemplar cards from %s", len(exemplars), args.exemplars)
+    else:
+        log.warning("No corpus exemplars at %s — neurons fall through to Llama (fail loud).", args.exemplars)
     prompt_to_map, ordered_maps = build_per_prompt_annotations(args.graphs_dir)
 
     import tempfile
@@ -274,7 +297,7 @@ def main() -> None:
     from circuits.analysis.circuit_ops import Circuit
     from circuits.frontend.server import serve as _serve
 
-    install_local_card_endpoint(stores)
+    install_local_card_endpoint(stores, exemplars)
 
     log.info("Loading circuit %s", args.circuit)
     c = Circuit.load_from_pickle(str(args.circuit))
