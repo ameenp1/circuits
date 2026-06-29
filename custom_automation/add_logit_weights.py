@@ -36,7 +36,7 @@ def main() -> None:
     ap = argparse.ArgumentParser(description="Add Gemma-2-correct logit-weights to the exemplar store.")
     ap.add_argument("--exemplars", type=Path, default=Path("custom_automation/np_data/mlp_exemplars.json"))
     ap.add_argument("--model-id", default="google/gemma-2-2b")
-    ap.add_argument("--top-k", type=int, default=10)
+    ap.add_argument("--top-k", type=int, default=5)   # match the SLT side (Neuronpedia stores 5)
     ap.add_argument("--device", default="cuda")
     ap.add_argument("--dtype", default="bf16", choices=["bf16", "fp16", "fp32"])
     args = ap.parse_args()

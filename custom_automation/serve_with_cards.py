@@ -253,10 +253,11 @@ def install_local_card_endpoint(
                 return super()._handle_neuron_exemplars()
             # Promote/demote = the card's own logit-weights (Fix #2, add_logit_weights.py) if
             # present; else the per-prompt output_contributions for the current prompt.
+            # 5 each, to match the SLT side (Neuronpedia stores 5 top/bottom logits).
             card = dict(card)
             pp = _store_for_current().get((layer, neuron)) or {}
-            card.setdefault("top_logits", pp.get("top_logits", []))
-            card.setdefault("bottom_logits", pp.get("bottom_logits", []))
+            card["top_logits"] = (card.get("top_logits") or pp.get("top_logits", []))[:5]
+            card["bottom_logits"] = (card.get("bottom_logits") or pp.get("bottom_logits", []))[:5]
             log.info("L%dN%d_%s: HIT corpus exemplars (act_max=%s)", layer, neuron, pol, card.get("act_max"))
             body = json.dumps(card).encode()
             self.send_response(200)

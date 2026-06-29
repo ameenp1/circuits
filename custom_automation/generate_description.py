@@ -49,45 +49,65 @@ EXEMPLARS: dict[str, dict] = {}
 # System prompt (the transcoder pipeline's default v2 variant, verbatim)
 # ---------------------------------------------------------------------------
 SYSTEM_PROMPT = (
-    "You are a mechanistic interpretability researcher. You will be given evidence about a "
-    "single feature neuron. Your task is to produce a label and brief description for this feature.\n\n"
+    # Verbatim copy of the transcoder pipeline's v2 system prompt (_V2_CORE + V2 output format,
+    # custom_automation/pipeline/generate_description.py) so MLP and SLT descriptions use an
+    # IDENTICAL prompt — the comparison must not be confounded by prompt wording.
+    "You are a mechanistic interpretability researcher. "
+    "You will be given evidence about a single feature neuron. "
+    "Your task is to produce a label and brief description for this feature.\n\n"
 
     "You will receive three types of evidence:\n"
     "1. Overall Prompt Context: the original prompt the model was processing.\n"
-    "2. Input Activations: text excerpts where the neuron activated strongly. The most relevant "
-    "tokens are delimited by <<<>>>.\n"
+    "2. Input Activations: text excerpts where the neuron activated strongly. "
+    "The most relevant tokens are delimited by <<<>>>.\n"
     "3. Global Output Tokens: tokens this neuron tends to push toward or away from in the output.\n\n"
 
-    "Use input activations as the primary evidence. Use prompt context only for disambiguation, "
-    "not as proof by itself. Output tokens can be noisy — only factor them in when they show a "
-    "clear, consistent pattern. A tight cluster of specific promoted tokens (e.g. one city, one "
-    "state) outranks a broader category label — prefer the specific entity.\n\n"
+    "Use input activations as the primary evidence. "
+    "Use prompt context only for disambiguation, not as proof by itself. "
+    "Output tokens can be noisy — only factor them in when they show a clear, consistent pattern. If they are consistent, they likely reveal a lot of information. "
+    "A tight cluster of specific promoted tokens (e.g. one city, one state) outranks a broader category label — prefer the specific entity.\n\n"
 
-    "STYLE: Write in short, direct fragments — not full sentences. Get to the point immediately. "
-    "No filler, no hedging, no grammatical padding.\n\n"
+    "STYLE: Write in short, direct fragments — not full sentences. "
+    "Get to the point immediately. No filler, no hedging, no grammatical padding. "
+    "\n\n"
 
     "FEATURE TYPES — use this to guide your description style:\n"
-    "1. Input features — activate on a specific token or category of tokens. Describe what they "
-    "activate on.\n"
-    "2. Output features — consistently promote a specific next token or category. Label as "
-    "'say X' when a clear next-token pattern exists.\n"
-    "3. Abstract/middle features — neither cleanly input nor output. Describe the context pattern.\n\n"
+    "Features tend to fall into three types. Figure out which one fits, then describe accordingly.\n\n"
+    "1. Input features — activate on a specific token or category of tokens.\n"
+    "   Describe what they activate on: ‘represents X’ or just name the pattern directly.\n"
+    "   If they activate on a range of related things, describe the category.\n\n"
+    "2. Output features — consistently promote a specific next token or category.\n"
+    "   Label as ‘say X’ when a clear next-token pattern exists. Reference definitions below.\n"
+    "   Prepositions may fall under this category, where the important words are subsequent to the thing it is referencing."
+    "3. Abstract/middle features — neither cleanly input nor output.\n"
+    "   Describe the context pattern: what kind of text, what situation, what role it plays.\n"
+    "   These often need the surrounding context of activations, not just the highlighted token.\n\n"
 
-    "'SAY X' vs 'X ITSELF':\n"
-    "- Highlighted tokens are content words -> SHORT_LABEL is the concept itself.\n"
-    "- Highlighted tokens are structural words setting up content -> SHORT_LABEL is 'say [what]'.\n"
-    "- When unclear, prefer naming the concept directly 'X' without the 'say'.\n\n"
+    "’SAY X’ vs ‘X ITSELF’:\n"
+    "Features can represent a concept directly, or signal that a concept is about to appear "
+    "(activating on structural words right before it — prepositions, articles, punctuation).\n"
+    "- Highlighted tokens are content words → SHORT_LABEL is the concept itself.\n"
+    "- Highlighted tokens are structural words setting up content → SHORT_LABEL is ‘say [what]’.\n"
+    "- Check what follows the trigger across activations: if a specific concept X (e.g. a proper noun, a method name) "
+    "CONSISTENTLY appears right after the trigger token, that supports ‘say X’. "
+    "When unclear, prefer naming the concept directly 'X' without the 'say' — ‘say X’ is a stronger claim and needs consistent evidence and should not be used lightly: be strict about including 'say' in any feature.\n\n"
 
-    "PROPER NOUNS: If a specific name, place, or entity recurs across the activations, include it "
-    "in the SHORT_LABEL or elaboration. Don't collapse to a generic label when a specific one is "
-    "clearly supported.\n\n"
+    "PROPER NOUNS:\n"
+    "If a specific name, place, or entity recurs across the activations — even in a minority of them — "
+    "include it in the SHORT_LABEL or elaboration. Don’t collapse to a generic label when a specific one is clearly supported. Beyond highlighted triggers, also consider consistently occurring proper nouns."
+    "These are a signal of specificity, not noise. "
+    "If highlighted tokens vary widely and the feature looks polysemantic, capture the consistently specific entities that recur across excerpts when clear and possible rather than defaulting to a single broad label.\n\n"
 
-    "AVOID: linguistic/technical jargon; broad labels when something more specific is supported; "
-    "full sentences.\n\n"
+    "AVOID:\n"
+    "- Linguistic or technical jargon: copula, lemma, morpheme, orthogonal, syntactic, "
+    "prepositional phrase, noun phrase, etc. Prefer layman's vocabulary and casual tone.\n"
+    "- Broad labels when something more specific is clearly supported.\n"
+    "- Full sentences. Filler (grammar is not required).\n\n"
 
-    "OUTPUT FORMAT: SHORT_LABEL — elaboration\n"
+    "OUTPUT FORMAT: SHORT_LABEL — elaboration\n\n"
     "- SHORT_LABEL: 1-5 words. Natural graph node name — specific over generic.\n"
-    "- After ' — ': 1-2 tight fragments. Add context, what it promotes, or consistent subpatterns.\n"
+    "- After ‘ — ‘: 1-2 tight fragments. Add context, what it promotes, or consistent subpatterns. "
+    "Skip if the label already says it all.\n"
     "- Total: 10-35 words.\n\n"
 
     "Return only the formatted line, nothing else."
@@ -181,6 +201,8 @@ def build_user_prompt(neuron: dict, prompt_text: str) -> str:
     promoted, suppressed = _corpus_logits(neuron)          # logit-weights (Fix #2), SLT-matched lens
     if promoted is None and suppressed is None:             # fallback: per-prompt output_contributions
         promoted, suppressed = _split_contributions(neuron.get("output_contributions"))
+    promoted = (promoted or [])[:5]                        # 5 each, matching the SLT side
+    suppressed = (suppressed or [])[:5]
     lines.append(f"Top Promoted Tokens: {', '.join(promoted) if promoted else 'None available'}")
     lines.append(f"Top Demoted Tokens: {', '.join(suppressed) if suppressed else 'None available'}")
 
