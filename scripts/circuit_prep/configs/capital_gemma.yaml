@@ -1,0 +1,12 @@
+# Capital 2-hop prompts — circuit preparation for Gemma 2 2B (base model).
+# Dataset module: scripts/circuit_prep/data/capital.py, generated from
+# prompts/prompts_capital.csv so the MLP graphs trace the IDENTICAL prompts as the SLT side.
+dataset: capital
+output_path: results/case_studies/capital_circuit.pkl
+model-id: google/gemma-2-2b
+# Magnitude prune: keep MLP neurons whose |attribution| is at least this fraction of the
+# target logit. Lower = more neurons. (Do NOT use node_attribution_threshold for ADAG.)
+percentage_threshold: 0.01
+batch_size: 4
+k: 5
+verbose: true
