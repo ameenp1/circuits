@@ -161,16 +161,6 @@ def any_concept_matches(concepts: list[str], text: str) -> bool:
     return any(concept_matches_text(c, text) for c in concepts)
 
 
-def answer_matches(predicted: str, correct: str) -> bool:
-    p = predicted.lower().strip()
-    c = correct.lower().strip()
-    if not p or not c:
-        return False
-    if len(p) < 3:
-        return p == c
-    return c in p or p in c
-
-
 # ===========================================================================
 # MLP graph loading + hop detection
 # ===========================================================================
@@ -178,14 +168,27 @@ def answer_matches(predicted: str, correct: str) -> bool:
 _SUPPRESS_PREFIXES = ("suppress ", "anti-", "anti ", "demote ", "inhibit ", "avoid ", "repress ")
 
 
+def _norm_slug(s: str) -> str:
+    """Canonical slug key. Handles the mismatches seen in the real data:
+      - label carries a run suffix:      'grand-canyon-capital___2' -> 'grand-canyon-capital'
+      - filenames use underscores:       'birmingham_capital'       -> 'birmingham-capital'
+      - ground-truth uses hyphens:       'birmingham-capital'
+    so all three forms collapse to the same key."""
+    return s.split("___")[0].strip().lower().replace("_", "-")
+
+
 def load_mlp_graphs(graphs_dir: Path) -> dict[str, dict]:
-    """slug (graph['label']) -> MLP graph. Keyed by the label so the filename order doesn't matter."""
+    """normalized slug -> MLP graph. Prefers the internal `label` (hyphenated, matches ground
+    truth); falls back to the underscore filename. Both are normalized so they line up."""
     out: dict[str, dict] = {}
     for fp in sorted(graphs_dir.glob("graph_*.json")):
         g = json.loads(fp.read_text(encoding="utf-8"))
-        slug = str(g.get("label", "")).strip()
-        if slug:
-            out[slug] = g
+        raw = str(g.get("label", "")).strip() or fp.stem
+        # strip a leading "graph_0001_" index prefix when we fall back to the filename
+        raw = re.sub(r"^graph_\d+_", "", raw)
+        key = _norm_slug(raw)
+        if key:
+            out[key] = g
     return out
 
 
@@ -278,11 +281,6 @@ def detect_intermediate_hop(graph: dict, intermediate_concept: str) -> dict:
     }
 
 
-def _safe(tok: str) -> str:
-    t = (tok or "").strip()
-    return t.replace("\n", "\\n").replace("\r", "\\r") or "(empty)"
-
-
 def main() -> None:
     ap = argparse.ArgumentParser(description="Intermediate-hop detection for MLP (ADAG) graphs.")
     ap.add_argument("--graphs-dir", type=Path, required=True, help="MLP graph_*.json dir.")
@@ -300,21 +298,19 @@ def main() -> None:
     evidence: dict[str, dict] = {}   # slug -> {group_evidence, desc_evidence} (kept out of the flat CSV)
     for row in rows:
         slug = row["slug"].strip()
-        graph = graphs.get(slug)
+        graph = graphs.get(_norm_slug(slug))
         if graph is None:
-            print(f"  SKIP {slug} — no MLP graph (label) found")
+            print(f"  SKIP {slug} — no MLP graph found")
             continue
-        predicted = str(graph.get("target", "")).strip()
-        correct = row.get("correct_answer", "").strip()
+        # NOTE: graph['target'] is the SLUG, not the model's generated token, so we cannot judge
+        # model correctness from these graphs. This analysis is only about middle-hop presence.
         det = detect_intermediate_hop(graph, row.get("intermediate_concept", ""))
         evidence[slug] = {"group_evidence": det["group_evidence"], "desc_evidence": det["desc_evidence"]}
         flat = {k: v for k, v in det.items() if k not in ("hop_groups", "group_evidence", "desc_evidence")}
         results.append({
             "slug": slug,
             "intermediate_concept": row.get("intermediate_concept", ""),
-            "correct_answer": correct,
-            "predicted": _safe(predicted),
-            "model_correct": answer_matches(predicted, correct),
+            "correct_answer": row.get("correct_answer", "").strip(),
             **flat,
             "hop_groups": "; ".join(det["hop_groups"]),
         })
@@ -337,12 +333,13 @@ def main() -> None:
     n_hop_either = sum(1 for r in results if r["hop_found_either"])
     n_strong = sum(1 for r in results if r["hop_match_strong"])
     n_missed = n - n_hop_either
-    n_correct = sum(1 for r in results if r["model_correct"])
     md = [
         "# MLP intermediate-hop (middle-hop) analysis", "",
         "The intermediate step (e.g. the STATE/COUNTRY between the subject and its capital) is the "
         "quantity of interest. For each prompt we report whether that concept is present in the MLP "
         "graph and show the exact evidence, so nothing is taken on faith.", "",
+        "_(Model correctness is not reported: the MLP graphs store the slug in `target`, not the "
+        "model's generated token, so it can't be judged from these files.)_", "",
         f"- Graphs analyzed: **{n}**",
         f"- Middle hop present as a **supernode**: **{n_hop}/{n}** ({n_hop/n:.0%})",
         f"- Present in a supernode **or** any (grouped/ungrouped) neuron description: "
@@ -350,7 +347,6 @@ def main() -> None:
         f"- Of those, backed by at least one **non-fuzzy** match: **{n_strong}/{n}** "
         "(the rest rely only on the 4-char prefix heuristic — treat as weak)",
         f"- Middle hop **entirely absent**: **{n_missed}/{n}**",
-        f"- Model top-1 (traced target vs. correct answer): **{n_correct}/{n}**",
         "",
         "`hop`: ✓ supernode · ~ description-only · ✗ absent.  `strong`: ✓ has a non-fuzzy match.",
         "", "| slug | intermediate | hop | strong | #hop neurons | matched groups |",
