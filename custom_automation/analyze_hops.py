@@ -377,8 +377,24 @@ def main() -> None:
     (args.out_dir / "mlp_hop_analysis.md").write_text("\n".join(md), encoding="utf-8")
 
     print(f"Wrote {csv_path} and mlp_hop_analysis.md")
-    print(f"Middle hop — supernode: {n_hop}/{n}; group-or-desc: {n_hop_either}/{n}; "
-          f"non-fuzzy: {n_strong}/{n}; absent: {n_missed}/{n}")
+
+    # Terminal summary — same hop-detection metrics as the SLT analyze_hops.py.
+    # (SLT's "clerp" scan == MLP's neuron-description scan.) SLT also prints Model correct (top-1),
+    # Correct in top-5, Mean rank score, and the correct/wrong x hop breakdown — those need the
+    # model's prediction, which the MLP graphs do NOT store (nodes carry only
+    # layer/token/neuron/attribution/activation), so they can't be computed here.
+    n_hop_groups = n_hop
+    n_hop_desc = sum(1 for r in results if r["hop_found_in_desc"])
+    print()
+    print("=" * 60)
+    print(f"  Graphs analysed:            {n}")
+    print(f"  --- Hop detection ---")
+    print(f"  Groups only:                {n_hop_groups}/{n} ({n_hop_groups/n:.1%})")
+    print(f"  Description only:           {n_hop_desc - n_hop_groups}/{n}  (description but not group)")
+    print(f"  Groups OR description:      {n_hop_either}/{n} ({n_hop_either/n:.1%})")
+    print("=" * 60)
+    print("  (model-correct / top-5 / mean-rank-score need the model's prediction, which the")
+    print("   MLP graphs don't store — omitted. Hop detection is the computable subset.)")
 
 
 if __name__ == "__main__":
