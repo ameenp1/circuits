@@ -34,6 +34,7 @@ Usage (on the box — test_graphs is all you need for the SLT side):
 from __future__ import annotations
 
 import argparse
+import asyncio
 import json
 import re
 from pathlib import Path
@@ -155,20 +156,19 @@ def _dedup_descs(items: list[str]) -> list[str]:
     return out
 
 
-def _judge(client, source: Graph, target: Graph, source_method: str, target_method: str) -> dict:
-    """One LLM call PER source supernode, each shown ALL target features. Returns per-supernode match.
+def _direction_plan(source: Graph, target: Graph, source_method: str, target_method: str
+                    ) -> tuple[list[str], list[tuple[str, str]]]:
+    """Build the per-supernode judge prompts for one direction, without calling the LLM.
 
-    `target.features` is the FULL feature list from the loader — grouped AND ungrouped — so an
-    ungrouped feature on the other side can satisfy a supernode. Ungrouped features are described
-    and count as real evidence."""
+    Returns (target_feats, [(supernode_name, user_prompt), ...]). `target.features` is the FULL
+    feature list from the loader — grouped AND ungrouped — so an ungrouped feature on the other
+    side can satisfy a supernode. Empty job list if there is nothing to compare."""
     supernodes = source.concept_supernodes()
     target_feats = _dedup_descs([f.desc for f in target.features])
     if not supernodes or not target_feats:
-        # No described target features -> can't judge; flag skipped rather than mark all missing.
-        return {"skipped": not target_feats, "matches": {}}
-
+        return target_feats, []
     feat_block = "\n".join(f"{i}. {d}" for i, d in enumerate(target_feats))
-    matches: dict[str, dict] = {}
+    jobs: list[tuple[str, str]] = []
     for name, members in supernodes.items():
         member_block = "\n".join(f"  - {d}" for d in _dedup_descs([f.desc for f in members]))
         user = USER_TEMPLATE.format(
@@ -176,63 +176,37 @@ def _judge(client, source: Graph, target: Graph, source_method: str, target_meth
             source_method=source_method, target_method=target_method,
             supernode=name, members=member_block, features=feat_block,
         )
-        resp = client.chat.completions.create(
-            model=JUDGE_MODEL,
-            # gpt-5.4 spends reasoning tokens against this budget; keep it well above what the
-            # tiny JSON answer needs so a long feature list never truncates the response.
-            max_completion_tokens=16384,
-            messages=[{"role": "system", "content": SYSTEM}, {"role": "user", "content": user}],
-        )
-        text = (resp.choices[0].message.content or "").strip()
-        m = re.search(r"\{[\s\S]*\}", text)
-        if not m:
-            matches[name] = {"matched_features": [], "reason": "no JSON in judge response"}
-            continue
+        jobs.append((name, user))
+    return target_feats, jobs
+
+
+async def _judge_one(client, sem, user: str, target_feats: list[str]) -> dict:
+    """One judge call for one supernode, bounded by the semaphore. Never raises: a failed or
+    unparseable response degrades to 'no match' so one bad call can't abort the whole gather."""
+    try:
+        async with sem:
+            resp = await client.chat.completions.create(
+                model=JUDGE_MODEL,
+                # gpt-5.4 spends reasoning tokens against this budget; keep it well above the tiny
+                # JSON answer so a long feature list never truncates the response.
+                max_completion_tokens=16384,
+                messages=[{"role": "system", "content": SYSTEM}, {"role": "user", "content": user}],
+            )
+    except Exception as e:  # noqa: BLE001 — surface as a reason, keep the run alive
+        return {"matched_features": [], "reason": f"judge error: {e}"}
+    text = (resp.choices[0].message.content or "").strip()
+    m = re.search(r"\{[\s\S]*\}", text)
+    if not m:
+        return {"matched_features": [], "reason": "no JSON in judge response"}
+    try:
         entry = json.loads(m.group(0))
-        nums = [n for n in entry.get("feature_numbers", [])
-                if isinstance(n, int) and 0 <= n < len(target_feats)]
-        matches[name] = {
-            "matched_features": [target_feats[n] for n in nums],
-            "reason": str(entry.get("reason", "")).strip(),
-        }
-    return {"skipped": False, "matches": matches}
-
-
-def _missing(direction: dict) -> list[str]:
-    return [name for name, v in direction.get("matches", {}).items() if not v["matched_features"]]
-
-
-def run_slug(client, slug: str, mlp_path: Path, slt_graphs_dir: Path,
-             slt_desc_dir: Path | None) -> dict | None:
-    tg_p = slt_graphs_dir / f"{slug}.json"
-    if not tg_p.exists():
-        print(f"  [skip {slug}] missing SLT graph {tg_p}")
-        return None
-    de_p = (slt_desc_dir / f"{slug}.json") if slt_desc_dir else None
-    mlp = load_mlp_graph(mlp_path)
-    slt = load_slt_local(tg_p, de_p)
-
-    mlp_to_slt = _judge(client, mlp, slt, "MLP neurons", "SLT features")
-    slt_to_mlp = _judge(client, slt, mlp, "SLT features", "MLP neurons")
-
-    mlp_missing = _missing(mlp_to_slt)
-    slt_missing = _missing(slt_to_mlp)
-    for name in mlp_missing:
-        print(f'  MLP supernode missing in SLT features: "{name}"  [{slug}]')
-    for name in slt_missing:
-        print(f'  SLT supernode missing in MLP features: "{name}"  [{slug}]')
-    if not mlp_missing and not slt_missing:
-        print(f"  [ok {slug}] all supernodes have cross-method features")
-
+    except json.JSONDecodeError:
+        return {"matched_features": [], "reason": "unparseable JSON"}
+    nums = [n for n in entry.get("feature_numbers", [])
+            if isinstance(n, int) and 0 <= n < len(target_feats)]
     return {
-        "slug": slug,
-        "prompt": mlp.prompt,
-        "mlp_supernodes": list(mlp.concept_supernodes().keys()),
-        "slt_supernodes": list(slt.concept_supernodes().keys()),
-        "mlp_supernode_missing_in_slt": mlp_missing,
-        "slt_supernode_missing_in_mlp": slt_missing,
-        "mlp_to_slt": mlp_to_slt["matches"],
-        "slt_to_mlp": slt_to_mlp["matches"],
+        "matched_features": [target_feats[n] for n in nums],
+        "reason": str(entry.get("reason", "")).strip(),
     }
 
 
@@ -289,24 +263,78 @@ def main() -> None:
                          "you want to override the descriptions embedded in the test_graphs.")
     ap.add_argument("--out-dir", type=Path, default=Path("custom_automation/compare_out"))
     ap.add_argument("--slugs", nargs="*", help="Optional subset of slugs (default: all in --mlp-dir).")
+    ap.add_argument("--concurrency", type=int, default=50,
+                    help="Max in-flight judge calls. Tier-5 accounts can push this to 100+.")
     args = ap.parse_args()
+    asyncio.run(_amain(args))
 
-    from openai import OpenAI
 
-    client = OpenAI()
+async def _amain(args) -> None:
+    from openai import AsyncOpenAI
+
+    client = AsyncOpenAI()
+    sem = asyncio.Semaphore(args.concurrency)
+
     mlp_paths = {slug_from_mlp_path(p): p for p in sorted(args.mlp_dir.glob("graph_*.json"))}
     if not mlp_paths:
         mlp_paths = {slug_from_mlp_path(p): p for p in sorted(args.mlp_dir.glob("*.json"))}
     slugs = args.slugs or sorted(mlp_paths)
 
-    reports = []
+    # Plan: load every graph (fast, local) and build all judge prompts up front, so the whole
+    # batch — every supernode, both directions, every slug — can fire concurrently in one gather.
+    plan: dict[str, dict] = {}          # slug -> per-graph accumulator (results filled in below)
+    coros, metas = [], []               # parallel lists: coros[i] fills metas[i] = (slug, dir, name)
     for slug in slugs:
         if slug not in mlp_paths:
             print(f"  [skip {slug}] no MLP graph in {args.mlp_dir}")
             continue
-        rep = run_slug(client, slug, mlp_paths[slug], args.slt_graphs_dir, args.slt_desc_dir)
-        if rep:
-            reports.append(rep)
+        tg_p = args.slt_graphs_dir / f"{slug}.json"
+        if not tg_p.exists():
+            print(f"  [skip {slug}] missing SLT graph {tg_p}")
+            continue
+        de_p = (args.slt_desc_dir / f"{slug}.json") if args.slt_desc_dir else None
+        mlp = load_mlp_graph(mlp_paths[slug])
+        slt = load_slt_local(tg_p, de_p)
+        plan[slug] = {
+            "prompt": mlp.prompt,
+            "mlp_supernodes": list(mlp.concept_supernodes().keys()),
+            "slt_supernodes": list(slt.concept_supernodes().keys()),
+            "mlp_to_slt": {}, "slt_to_mlp": {},
+        }
+        for dkey, (src, tgt, sm, tm) in (
+            ("mlp_to_slt", (mlp, slt, "MLP neurons", "SLT features")),
+            ("slt_to_mlp", (slt, mlp, "SLT features", "MLP neurons")),
+        ):
+            target_feats, jobs = _direction_plan(src, tgt, sm, tm)
+            for name, user in jobs:
+                coros.append(_judge_one(client, sem, user, target_feats))
+                metas.append((slug, dkey, name))
+
+    if not plan:
+        write_reports([], args.out_dir)
+        return
+
+    print(f"Dispatching {len(coros)} judge calls across {len(plan)} graphs "
+          f"(concurrency={args.concurrency}, model={JUDGE_MODEL})...")
+    results = await asyncio.gather(*coros)          # order matches `metas`
+    for (slug, dkey, name), res in zip(metas, results):
+        plan[slug][dkey][name] = res
+
+    reports = []
+    for slug, e in plan.items():
+        mlp_missing = [n for n, v in e["mlp_to_slt"].items() if not v["matched_features"]]
+        slt_missing = [n for n, v in e["slt_to_mlp"].items() if not v["matched_features"]]
+        for name in mlp_missing:
+            print(f'  MLP supernode missing in SLT features: "{name}"  [{slug}]')
+        for name in slt_missing:
+            print(f'  SLT supernode missing in MLP features: "{name}"  [{slug}]')
+        reports.append({
+            "slug": slug, "prompt": e["prompt"],
+            "mlp_supernodes": e["mlp_supernodes"], "slt_supernodes": e["slt_supernodes"],
+            "mlp_supernode_missing_in_slt": mlp_missing,
+            "slt_supernode_missing_in_mlp": slt_missing,
+            "mlp_to_slt": e["mlp_to_slt"], "slt_to_mlp": e["slt_to_mlp"],
+        })
 
     write_reports(reports, args.out_dir)
 
