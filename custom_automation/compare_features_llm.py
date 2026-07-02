@@ -17,16 +17,19 @@ Prints (and writes) the gaps each direction:
     SLT supernode missing in MLP: "<name>"
 
 MLP  = raw down_proj neurons, circuits/ graphs (graph_*.json, --mlp-dir).
-SLT  = single-layer transcoder features, circuit-tracer-automation artifacts (--np-dir:
-       test_graphs/<slug>.json + artifacts/<slug>__{feature_descriptions_v2,feature_groups_v2_a2}.json).
+SLT  = single-layer transcoder features. Reads the layout you already have: a dir of Neuronpedia
+       test_graphs (<slug>.json — supernode grouping is taken from the embedded qParams.supernodes)
+       and a dir of feature_descriptions (<slug>.json, e.g. slt_descriptions/). No separate
+       feature_groups artifact is needed.
 
-Loaders + the Graph/Feature model are reused from cross_graph_analysis.py, so "which side is
-which" is defined in exactly one place.
+The MLP loader + the Graph/Feature model are reused from cross_graph_analysis.py; the SLT graph
+is built by load_slt_local (below), so "which side is which" stays defined in one place.
 
-Usage:
+Usage (on the box, where the MLP graphs live and the SLT dirs are uploaded):
     OPENAI_API_KEY=... uv run python custom_automation/compare_features_llm.py \
         --mlp-dir results/case_studies/capital_neuron_graphs \
-        --np-dir ../circuit-tracer-automation/custom_automation/np_data \
+        --slt-graphs-dir ../test_graphs \
+        --slt-desc-dir  ../slt_descriptions \
         --out-dir custom_automation/compare_out
 """
 from __future__ import annotations
@@ -37,12 +40,57 @@ import re
 from pathlib import Path
 
 from cross_graph_analysis import (
+    Feature,
     Graph,
     load_mlp_graph,
-    load_transcoder_graph,
-    resolve_transcoder_paths,
     slug_from_mlp_path,
 )
+
+
+def load_slt_local(tg_path: Path, desc_path: Path) -> Graph:
+    """Build the SLT (transcoder) Graph from the layout you actually have — a Neuronpedia
+    test_graph + a feature_descriptions list — WITHOUT needing the separate feature_groups
+    artifact. The supernode grouping is embedded in the test_graph's `qParams.supernodes`
+    (a JSON string of [group_name, member_id, ...]), and those member ids are identical to the
+    description `id`s, so we can map feature -> group directly."""
+    tg = json.loads(tg_path.read_text(encoding="utf-8"))
+    descs = json.loads(desc_path.read_text(encoding="utf-8"))
+    meta = tg.get("metadata", {})
+
+    groups: dict[str, str] = {}
+    raw = (tg.get("qParams") or {}).get("supernodes")
+    if raw:
+        for grp in json.loads(raw):
+            if not grp:
+                continue
+            name, members = grp[0], grp[1:]
+            for mid in members:
+                groups[str(mid)] = name
+
+    target = ""
+    for n in tg.get("nodes", []):
+        if n.get("is_target_logit") or n.get("feature_type") == "logit":
+            target = (n.get("clerp") or n.get("token") or "").strip() or target
+            if n.get("is_target_logit"):
+                break
+
+    feats: list[Feature] = []
+    for e in descs:
+        desc = (e.get("generated_description") or "").strip()
+        if not desc:
+            continue
+        fid = str(e["id"])
+        feats.append(Feature(
+            fid=fid, layer=int(e.get("layer", 0)), ctx=int(e.get("ctx_idx", 0)),
+            score=float(e.get("influence_score", 0.0)), desc=desc,
+            group=groups.get(fid, "Ungrouped"),
+            promotes=list(e.get("promotes") or []), demotes=list(e.get("demotes") or []),
+        ))
+    return Graph(
+        side="transcoder", slug=meta.get("slug", tg_path.stem), prompt=meta.get("prompt", ""),
+        target=target, features=feats, node_type_counts={}, n_token_nodes=len(tg.get("nodes", [])),
+        n_edges=len(tg.get("links", [])), n_tokens=len(meta.get("prompt_tokens") or []),
+    )
 
 # The interesting-graphs judge model (custom_automation/analysis/explore_interesting_graphs.py).
 JUDGE_MODEL = "gpt-5.4"
@@ -137,14 +185,15 @@ def _missing(direction: dict) -> list[str]:
     return [name for name, v in direction.get("matches", {}).items() if not v["matched_features"]]
 
 
-def run_slug(client, slug: str, mlp_path: Path, np_dir: Path, groups_variant: str) -> dict | None:
-    tg_p, gr_p, de_p = resolve_transcoder_paths(np_dir, slug, groups_variant)
-    for p in (tg_p, gr_p, de_p):
+def run_slug(client, slug: str, mlp_path: Path, slt_graphs_dir: Path, slt_desc_dir: Path) -> dict | None:
+    tg_p = slt_graphs_dir / f"{slug}.json"
+    de_p = slt_desc_dir / f"{slug}.json"
+    for p in (tg_p, de_p):
         if not p.exists():
-            print(f"  [skip {slug}] missing SLT file {p.name}")
+            print(f"  [skip {slug}] missing SLT file {p}")
             return None
     mlp = load_mlp_graph(mlp_path)
-    slt = load_transcoder_graph(tg_p, gr_p, de_p)
+    slt = load_slt_local(tg_p, de_p)
 
     mlp_to_slt = _judge(client, mlp, slt, "MLP neurons", "SLT features")
     slt_to_mlp = _judge(client, slt, mlp, "SLT features", "MLP neurons")
@@ -215,9 +264,10 @@ def write_reports(reports: list[dict], out_dir: Path) -> None:
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--mlp-dir", type=Path, required=True, help="Dir of MLP graph_*.json (circuits/).")
-    ap.add_argument("--np-dir", type=Path, required=True,
-                    help="Neuronpedia dir: test_graphs/ + artifacts/ (circuit-tracer-automation).")
-    ap.add_argument("--groups-variant", default="feature_groups_v2_a2")
+    ap.add_argument("--slt-graphs-dir", type=Path, required=True,
+                    help="Dir of SLT Neuronpedia test_graphs (<slug>.json; grouping read from qParams).")
+    ap.add_argument("--slt-desc-dir", type=Path, required=True,
+                    help="Dir of SLT feature_descriptions (<slug>.json; e.g. slt_descriptions/).")
     ap.add_argument("--out-dir", type=Path, default=Path("custom_automation/compare_out"))
     ap.add_argument("--slugs", nargs="*", help="Optional subset of slugs (default: all in --mlp-dir).")
     args = ap.parse_args()
@@ -235,7 +285,7 @@ def main() -> None:
         if slug not in mlp_paths:
             print(f"  [skip {slug}] no MLP graph in {args.mlp_dir}")
             continue
-        rep = run_slug(client, slug, mlp_paths[slug], args.np_dir, args.groups_variant)
+        rep = run_slug(client, slug, mlp_paths[slug], args.slt_graphs_dir, args.slt_desc_dir)
         if rep:
             reports.append(rep)
 
