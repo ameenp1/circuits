@@ -17,19 +17,18 @@ Prints (and writes) the gaps each direction:
     SLT supernode missing in MLP: "<name>"
 
 MLP  = raw down_proj neurons, circuits/ graphs (graph_*.json, --mlp-dir).
-SLT  = single-layer transcoder features. Reads the layout you already have: a dir of Neuronpedia
-       test_graphs (<slug>.json — supernode grouping is taken from the embedded qParams.supernodes)
-       and a dir of feature_descriptions (<slug>.json, e.g. slt_descriptions/). No separate
-       feature_groups artifact is needed.
+SLT  = single-layer transcoder features. Needs ONLY the Neuronpedia test_graphs dir (<slug>.json):
+       the supernode grouping is in qParams.supernodes, and each described feature's
+       generated_description is stored as its node `clerp`. No separate feature_descriptions or
+       feature_groups files required.
 
 The MLP loader + the Graph/Feature model are reused from cross_graph_analysis.py; the SLT graph
 is built by load_slt_local (below), so "which side is which" stays defined in one place.
 
-Usage (on the box, where the MLP graphs live and the SLT dirs are uploaded):
+Usage (on the box — test_graphs is all you need for the SLT side):
     OPENAI_API_KEY=... uv run python custom_automation/compare_features_llm.py \
-        --mlp-dir results/case_studies/capital_neuron_graphs \
-        --slt-graphs-dir ../test_graphs \
-        --slt-desc-dir  ../slt_descriptions \
+        --mlp-dir capital_neuron_graphs \
+        --slt-graphs-dir test_graphs \
         --out-dir custom_automation/compare_out
 """
 from __future__ import annotations
@@ -47,14 +46,17 @@ from cross_graph_analysis import (
 )
 
 
-def load_slt_local(tg_path: Path, desc_path: Path) -> Graph:
-    """Build the SLT (transcoder) Graph from the layout you actually have — a Neuronpedia
-    test_graph + a feature_descriptions list — WITHOUT needing the separate feature_groups
-    artifact. The supernode grouping is embedded in the test_graph's `qParams.supernodes`
-    (a JSON string of [group_name, member_id, ...]), and those member ids are identical to the
-    description `id`s, so we can map feature -> group directly."""
+def load_slt_local(tg_path: Path, desc_path: Path | None = None) -> Graph:
+    """Build the SLT (transcoder) Graph from a Neuronpedia test_graph ALONE — no separate
+    feature_groups or feature_descriptions artifact needed:
+      - supernode grouping is embedded in the graph's `qParams.supernodes`
+        (a JSON string of [group_name, member_id, ...]);
+      - each described feature's generated_description is stored on its node as `clerp`
+        (only the described features carry a clerp — exactly the feature_descriptions set),
+        and the node_id == the description id == the supernode member id, so it all lines up.
+    If `desc_path` is given, that feature_descriptions file is used instead (identical text,
+    plus promotes/demotes); otherwise the descriptions are read from the graph's node clerps."""
     tg = json.loads(tg_path.read_text(encoding="utf-8"))
-    descs = json.loads(desc_path.read_text(encoding="utf-8"))
     meta = tg.get("metadata", {})
 
     groups: dict[str, str] = {}
@@ -75,17 +77,32 @@ def load_slt_local(tg_path: Path, desc_path: Path) -> Graph:
                 break
 
     feats: list[Feature] = []
-    for e in descs:
-        desc = (e.get("generated_description") or "").strip()
-        if not desc:
-            continue
-        fid = str(e["id"])
-        feats.append(Feature(
-            fid=fid, layer=int(e.get("layer", 0)), ctx=int(e.get("ctx_idx", 0)),
-            score=float(e.get("influence_score", 0.0)), desc=desc,
-            group=groups.get(fid, "Ungrouped"),
-            promotes=list(e.get("promotes") or []), demotes=list(e.get("demotes") or []),
-        ))
+    if desc_path and desc_path.exists():
+        for e in json.loads(desc_path.read_text(encoding="utf-8")):
+            desc = (e.get("generated_description") or "").strip()
+            if not desc:
+                continue
+            fid = str(e["id"])
+            feats.append(Feature(
+                fid=fid, layer=int(e.get("layer", 0)), ctx=int(e.get("ctx_idx", 0)),
+                score=float(e.get("influence_score", 0.0)), desc=desc,
+                group=groups.get(fid, "Ungrouped"),
+                promotes=list(e.get("promotes") or []), demotes=list(e.get("demotes") or []),
+            ))
+    else:
+        # descriptions live in the graph itself, as the clerp of each described transcoder node
+        for n in tg.get("nodes", []):
+            if n.get("feature_type") != "cross layer transcoder":
+                continue
+            desc = (n.get("clerp") or "").strip()
+            if not desc:                       # undescribed nodes have empty clerp -> skip
+                continue
+            fid = str(n.get("node_id", ""))
+            feats.append(Feature(
+                fid=fid, layer=int(n.get("layer", 0) or 0), ctx=int(n.get("ctx_idx", 0) or 0),
+                score=float(n.get("influence", 0.0) or 0.0), desc=desc,
+                group=groups.get(fid, "Ungrouped"), promotes=[], demotes=[],
+            ))
     return Graph(
         side="transcoder", slug=meta.get("slug", tg_path.stem), prompt=meta.get("prompt", ""),
         target=target, features=feats, node_type_counts={}, n_token_nodes=len(tg.get("nodes", [])),
@@ -185,13 +202,13 @@ def _missing(direction: dict) -> list[str]:
     return [name for name, v in direction.get("matches", {}).items() if not v["matched_features"]]
 
 
-def run_slug(client, slug: str, mlp_path: Path, slt_graphs_dir: Path, slt_desc_dir: Path) -> dict | None:
+def run_slug(client, slug: str, mlp_path: Path, slt_graphs_dir: Path,
+             slt_desc_dir: Path | None) -> dict | None:
     tg_p = slt_graphs_dir / f"{slug}.json"
-    de_p = slt_desc_dir / f"{slug}.json"
-    for p in (tg_p, de_p):
-        if not p.exists():
-            print(f"  [skip {slug}] missing SLT file {p}")
-            return None
+    if not tg_p.exists():
+        print(f"  [skip {slug}] missing SLT graph {tg_p}")
+        return None
+    de_p = (slt_desc_dir / f"{slug}.json") if slt_desc_dir else None
     mlp = load_mlp_graph(mlp_path)
     slt = load_slt_local(tg_p, de_p)
 
@@ -265,9 +282,11 @@ def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--mlp-dir", type=Path, required=True, help="Dir of MLP graph_*.json (circuits/).")
     ap.add_argument("--slt-graphs-dir", type=Path, required=True,
-                    help="Dir of SLT Neuronpedia test_graphs (<slug>.json; grouping read from qParams).")
-    ap.add_argument("--slt-desc-dir", type=Path, required=True,
-                    help="Dir of SLT feature_descriptions (<slug>.json; e.g. slt_descriptions/).")
+                    help="Dir of SLT Neuronpedia test_graphs (<slug>.json). Grouping AND descriptions "
+                         "are read from here (qParams.supernodes + node clerps) — this is all you need.")
+    ap.add_argument("--slt-desc-dir", type=Path, default=None,
+                    help="Optional. Separate feature_descriptions dir (<slug>.json). Only needed if "
+                         "you want to override the descriptions embedded in the test_graphs.")
     ap.add_argument("--out-dir", type=Path, default=Path("custom_automation/compare_out"))
     ap.add_argument("--slugs", nargs="*", help="Optional subset of slugs (default: all in --mlp-dir).")
     args = ap.parse_args()
