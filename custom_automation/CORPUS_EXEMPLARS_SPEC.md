@@ -153,8 +153,14 @@ Llama recipe is the wrong target (Llama tokenizer, chat prefix) — irrelevant h
 VERIFIED for **gemma-2-2b** gemmascope dashboards (Neuronpedia + SAEDashboard
 `NeuronpediaRunnerConfig`):
 - **Corpus:** `monology/pile-uncopyrighted` — **must be the identical dataset.**
-- **Budget:** **36,864 prompts × 128 tokens = 4,718,592 ≈ 4.7M tokens.** Match this exact
-  budget. (NOT 10M — the SLT side scanned 4.7M; scanning more breaks parity.)
+- **Budget:** **24,576 prompts × 128 tokens = 3,145,728 ≈ 3.1M tokens.** This is the
+  neuronpedia-runner default (`--n-prompts=24576`) that the SLT side —
+  `mwhanna/gemma-scope-transcoders` — was generated with. (Earlier this doc said 36,864; that
+  is the *residual-SAE website* config, a DIFFERENT source. The transcoder set uses 24,576.)
+- **Context construction (byte-exact):** SAEDashboard uses `disable_concat_sequences=True` —
+  ONE context per document (`[BOS] + first 127 tokens`), docs <127 tokens skipped, exact-dup
+  contexts dropped. NOT stream-concatenation. `build_contexts` replicates this exactly (verified
+  against sae_lens `concat_and_batch_sequences`).
 - **Context:** 128 tokens per prompt.
 - **Tokenization / BOS:** VERIFIED from the SAE cfg metadata
   (`SAE.from_pretrained("gemma-scope-2b-pt-res-canonical",...).cfg.metadata`):
@@ -188,7 +194,8 @@ VERIFIED for **gemma-2-2b** gemmascope dashboards (Neuronpedia + SAEDashboard
   Per user: this does NOT ruin the comparison as long as the corpus is identical — it's a
   legitimate MLP-specific signal that the (non-negative) SLT side simply lacks. Harvest it;
   label `−` neurons as MLP-only / no-SLT-counterpart, don't drop them.
-- **RESOLVED — budget = 4.7M, match exactly** (not 10M).
+- **RESOLVED — budget = 24,576 prompts ≈ 3.1M tokens, match exactly** (the transcoder-set
+  default; NOT 36,864/4.7M, which was the residual-SAE website config).
 - **RESOLVED — dead/rare = fail loud** (A3). MVP. No per-prompt fallback, no substitution.
 - **CORRECTION — the SLT transcoders are SINGLE-LAYER, not cross-layer.** The data is
   labeled "cross layer transcoder" by a default misnomer; they are **single-layer (per-layer)
@@ -255,7 +262,7 @@ only approximation is sampling each band from a per-neuron reservoir of firing e
 rather than from all — documented in the script).
 
 ## Cost / scale
-Traced union (hundreds–low-thousands of neurons) × one pass over 4.7M tokens (36,864×128) on
+Traced union (hundreds–low-thousands of neurons) × one pass over ~3.1M tokens (24,576×128) on
 an H100 = **minutes**. Sparse capture (only traced columns) + a top-20 heap + a ~400-example
 reservoir per `(layer,neuron,polarity)` ≈ a few hundred MB host RAM.
 
@@ -303,7 +310,7 @@ Every one of these is a claim that, if wrong, silently corrupts the comparison.
    distribution of the `context`/`tokens` fields in the downloaded
    `feature_descriptions_v2.json` (or a raw hosted feature). Confirm the harvest exports
    `peak ± buffer` with `buffer` set to ≈ that median, and forwards 128 only for activations.
-4. **Budget = 4.7M, matched.** 36,864 × 128. Not 10M. Confirm the harvest scans exactly this.
+4. **Budget = ~3.1M, matched.** 24,576 × 128 (transcoder-set default). Confirm the harvest scans exactly this.
 5. **Banding == SAEDashboard.** 20 TOP (top-k) + 5 bands × 5, bins `linspace(0, max)`.
    Confirm the harvest's band edges and per-band counts match.
 6. **Polarity.** `+` = max(act), `−` = max(−act). Confirm `−` neurons are kept + labeled

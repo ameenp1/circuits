@@ -7,7 +7,11 @@ per-prompt attribution snippet).
 
 Lens matched to gemmascope (ALL verified — see the spec):
   corpus    monology/pile-uncopyrighted  (== SAE cfg.metadata.dataset_path)
-  tokens    prepend_bos=True, 128-token contexts, 36,864 prompts (~4.7M tokens)
+  tokens    prepend_bos=True, 128-token contexts, 24,576 prompts (~3.1M tokens), ONE context per
+            document (BOS + its first 127 tokens; docs <127 toks skipped; exact-dup contexts
+            dropped) — byte-exact to SAEDashboard/sae_lens ActivationsStore(disable_concat_
+            sequences=True). 24,576 == the neuronpedia-runner default the mwhanna/gemma-scope-
+            transcoders dashboards (the SLT side) were generated with.
             (1024 in the SAE cfg is the *training* context, NOT the exemplar window)
   banding   20 TOP (deterministic top-k) + 5 quantile bands × 5, bins = linspace(0, max)
             equal-width over the activation range (SAEDashboard sequence_data_generator)
@@ -57,31 +61,51 @@ def build_union(graphs_dir: Path) -> dict[int, list[int]]:
 
 
 # ---------------------------------------------------------------------------
-# 2. Corpus -> BOS-prefixed 128-token contexts
+# 2. Corpus -> BOS-prefixed 128-token contexts (byte-exact to SAEDashboard)
 # ---------------------------------------------------------------------------
 
 def build_contexts(dataset: str, tokenizer, context: int, n_prompts: int) -> np.ndarray:
-    """[n_prompts, context] int32 of token ids; each context starts with <bos> (prepend_bos)."""
+    """[n_prompts, context] int32 token ids, built BYTE-EXACT to how the GemmaScope transcoder
+    dashboards were generated: SAEDashboard/NeuronpediaRunner over sae_lens' ActivationsStore with
+    ``disable_concat_sequences=True``.
+
+    That means ONE context per document — NOT concatenation across documents:
+      - tokenize each document (add_special_tokens=False, == HookedTransformer to_tokens
+        prepend_bos=False);
+      - if it has >= context-1 real tokens: context = [BOS] + its first (context-1) tokens;
+      - documents with < context-1 tokens are SKIPPED (they never reach full length);
+      - drop exact-duplicate contexts (NeuronpediaRunner.generate_tokens dedup);
+      - take the first ``n_prompts`` in streaming order (order is irrelevant to max-activation
+        selection, so the runner's post-hoc shuffle_tokens has no effect on the result).
+
+    Ref: sae_lens/tokenization_and_batching.py ``concat_and_batch_sequences`` (disable-concat
+    branch) + NeuronpediaRunner.generate_tokens.
+    """
     from datasets import load_dataset
 
     bos = tokenizer.bos_token_id
     ds = load_dataset(dataset, split="train", streaming=True)
     contexts = np.empty((n_prompts, context), dtype=np.int32)
-    buf: list[int] = []
+    seen: set[tuple[int, ...]] = set()
     filled = 0
     for ex in ds:
-        ids = tokenizer(ex.get("text", ""), add_special_tokens=False)["input_ids"]
-        buf.extend(ids)
-        while len(buf) >= context - 1 and filled < n_prompts:
-            contexts[filled, 0] = bos
-            contexts[filled, 1:] = buf[: context - 1]
-            buf = buf[context - 1 :]
-            filled += 1
+        toks = tokenizer(ex.get("text", ""), add_special_tokens=False)["input_ids"]
+        if len(toks) < context - 1:          # too short to form a full context -> skipped
+            continue
+        seq = [bos, *toks[: context - 1]]    # exactly `context` tokens: BOS + first (context-1)
+        key = tuple(seq)
+        if key in seen:                      # dedup exact-duplicate contexts
+            continue
+        seen.add(key)
+        contexts[filled] = seq
+        filled += 1
         if filled >= n_prompts:
             break
     if filled < n_prompts:
         raise RuntimeError(f"corpus exhausted at {filled}/{n_prompts} contexts — pick a larger split")
-    print(f"Built {filled} contexts × {context} tokens (BOS-prefixed) from {dataset}.")
+    print(f"Built {filled} contexts × {context} tokens "
+          f"(one doc each: BOS + first {context - 1}; docs < {context - 1} toks skipped; "
+          f"dedup on) from {dataset}.")
     return contexts
 
 
@@ -270,7 +294,7 @@ def main() -> None:
     ap.add_argument("--out", type=Path, default=Path("custom_automation/np_data/mlp_exemplars.json"))
     ap.add_argument("--model-id", default="google/gemma-2-2b")
     ap.add_argument("--dataset", default="monology/pile-uncopyrighted")  # verified == SLT
-    ap.add_argument("--n-prompts", type=int, default=36864)              # verified == SLT (×128 = 4.7M)
+    ap.add_argument("--n-prompts", type=int, default=24576)              # == SLT transcoder set (×128 ≈ 3.1M)
     ap.add_argument("--context", type=int, default=128)                  # forward prompt length (acts need full context)
     ap.add_argument("--buffer", type=int, default=16,                     # EXPORTED window = peak ± buffer (~33 tokens)
                     help="tokens each side of the peak in the EXPORTED exemplar. Match the SLT "
