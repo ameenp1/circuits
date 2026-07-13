@@ -240,17 +240,26 @@ async def describe_neuron(neuron: dict, prompt_text: str, client: AsyncOpenAI,
                     neuron["generated_description"] = "Error generating description"
 
 
+def _needs_desc(neuron: dict) -> bool:
+    """A neuron still needs describing if it has no description or only the error sentinel."""
+    d = (neuron.get("generated_description") or "").strip()
+    return not d or d == "Error generating description"
+
+
 async def process_graph(path: Path, client: AsyncOpenAI, sem: asyncio.Semaphore) -> None:
     graph = json.loads(path.read_text(encoding="utf-8"))
     prompt_text = graph.get("prompt", "Unknown prompt")
     neurons = graph.get("neurons", [])
-    log.info("=== %s — %d neurons — '%s' ===", path.name, len(neurons), prompt_text)
-
     total = len(neurons)
-    tasks = [
-        describe_neuron(n, prompt_text, client, sem, i + 1, total)
-        for i, n in enumerate(neurons)
-    ]
+
+    # Resume: only describe neurons that don't already have a real description.
+    todo = [(i, n) for i, n in enumerate(neurons) if _needs_desc(n)]
+    if not todo:
+        log.info("=== %s — already fully described (%d neurons) — SKIP ===", path.name, total)
+        return
+
+    log.info("=== %s — %d/%d neurons to describe — '%s' ===", path.name, len(todo), total, prompt_text)
+    tasks = [describe_neuron(n, prompt_text, client, sem, i + 1, total) for i, n in todo]
     await asyncio.gather(*tasks)
 
     path.write_text(json.dumps(graph, indent=2, ensure_ascii=False), encoding="utf-8")

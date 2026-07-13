@@ -665,6 +665,16 @@ async def process_graph(
     are assigned in Phase 2. Returns (n_grouped_neurons, n_ungrouped_neurons).
     """
     graph = json.loads(path.read_text(encoding="utf-8"))
+
+    # Resume: skip graphs already grouped (supernodes/ungrouped written together in place).
+    if graph.get("supernodes") or "ungrouped" in graph:
+        sn = graph.get("supernodes") or {}
+        n_grouped = sum(len(v) for v in sn.values())
+        n_ungrouped = len(graph.get("ungrouped", []))
+        log.info("=== %s — already grouped (%d supernodes, %d grouped / %d ungrouped) — SKIP ===",
+                 path.name, len(sn), n_grouped, n_ungrouped)
+        return n_grouped, n_ungrouped
+
     prompt_text = graph.get("prompt") or "Unknown prompt"
     features = load_features(graph)
     log.info("=== %s — %d described features — '%s' ===", path.name, len(features), prompt_text)
