@@ -5,8 +5,13 @@ dataset: capital
 output_path: results/case_studies/capital_circuit.pkl
 model-id: google/gemma-2-2b
 # Magnitude prune: keep MLP neurons whose |attribution| is at least this fraction of the
-# target logit. Lower = more neurons. (Do NOT use node_attribution_threshold for ADAG.)
-percentage_threshold: 0.01
+# target logit. Lower = more neurons, super-linearly (magnitudes are heavy-tailed).
+# Measured exported features/graph (capital, gemma-2-2b): 0.01->~53, 0.006->~107,
+# 0.005->~143, 0.004->~192, 0.003->~298, 0.0025->~390, 0.002->~547. 0.004 gives ~200.
+# NOTE: --top-n in batch_export_neurons.py (150) still caps export, so this ~192 pool is
+# trimmed to the 150 strongest; the threshold just gives 150 headroom + a "was NC in the
+# ~192?" check. (Do NOT use node_attribution_threshold for ADAG.)
+percentage_threshold: 0.004
 batch_size: 4
 k: 5
 verbose: true

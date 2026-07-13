@@ -17,7 +17,7 @@ Recommended two-step workflow:
            --circuit results/case_studies/capitals_gemma_circuit.pkl \
            --model-id google/gemma-2-2b \
            --dataset capitals \
-           --top-n 30 --mode per-prompt --out capitals_neurons.json
+           --top-n 150 --mode per-prompt --out capitals_neurons.json
 
 Modes:
   --mode per-prompt   one top-N list per prompt (separate attribution graph). [default]
@@ -105,7 +105,7 @@ def main() -> None:
         help="Optional data module name to attach prompt/target text to each entry.",
     )
     parser.add_argument(
-        "--top-n", type=int, default=30,
+        "--top-n", type=int, default=150,
         help="Neurons per graph, ranked by |attribution|. Use 0 for ALL surviving neurons.",
     )
     parser.add_argument("--top-tokens", type=int, default=8, help="Top tokens per example.")

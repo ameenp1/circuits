@@ -658,11 +658,11 @@ def write_supernodes_into_graph(
 
 async def process_graph(
     path: Path, client: AsyncOpenAI, top_k_seed: int = GROUPING_TOP_K_SEED
-) -> None:
+) -> tuple[int, int]:
     """Group one graph_*.json into supernodes and write the result back in place.
 
     `top_k_seed` is how many of the most-influential features seed Phase 1; the rest
-    are assigned in Phase 2.
+    are assigned in Phase 2. Returns (n_grouped_neurons, n_ungrouped_neurons).
     """
     graph = json.loads(path.read_text(encoding="utf-8"))
     prompt_text = graph.get("prompt") or "Unknown prompt"
@@ -670,7 +670,7 @@ async def process_graph(
     log.info("=== %s — %d described features — '%s' ===", path.name, len(features), prompt_text)
     if not features:
         log.warning("No described features in %s — skipping.", path.name)
-        return
+        return 0, 0
 
     output_context = build_output_context(graph, features)
 
@@ -696,16 +696,44 @@ async def process_graph(
 
     n_groups, n_ungrouped = write_supernodes_into_graph(graph, features, final_assignments)
     path.write_text(json.dumps(graph, indent=2, ensure_ascii=False), encoding="utf-8")
+    n_grouped = len(features) - n_ungrouped
     log.info(
         "Wrote %d supernodes (%d features, %d ungrouped) back into %s",
-        n_groups, len(features) - n_ungrouped, n_ungrouped, path,
+        n_groups, n_grouped, n_ungrouped, path,
     )
+    return n_grouped, n_ungrouped
 
 
-async def main_async(graphs: list[Path], top_k_seed: int = GROUPING_TOP_K_SEED) -> None:
+def write_grouping_metrics(out_path: Path, grouped: int, ungrouped: int) -> None:
+    """Write an md file with the grouped-vs-Ungrouped MLP neuron counts + ratio.
+
+    MLP is harder to interpret partly because a large share of its neurons never
+    land in a semantic group — this tracks exactly that fraction.
+    """
+    total = grouped + ungrouped
+    frac_grouped = grouped / total if total else 0.0
+    md = (
+        "# MLP Neuron Grouping Metrics\n\n"
+        f"- Total MLP neurons: {total}\n"
+        f"- Grouped: {grouped}\n"
+        f"- Ungrouped: {ungrouped}\n"
+        f"- Fraction grouped: {frac_grouped:.2%}\n"
+    )
+    out_path.write_text(md, encoding="utf-8")
+    log.info("Wrote grouping metrics (%d/%d grouped) to %s", grouped, total, out_path)
+
+
+async def main_async(
+    graphs: list[Path], top_k_seed: int = GROUPING_TOP_K_SEED, metrics_path: Path | None = None
+) -> None:
     client = AsyncOpenAI()
+    total_grouped = total_ungrouped = 0
     for p in graphs:
-        await process_graph(p, client, top_k_seed)
+        grouped, ungrouped = await process_graph(p, client, top_k_seed)
+        total_grouped += grouped
+        total_ungrouped += ungrouped
+    if metrics_path is not None:
+        write_grouping_metrics(metrics_path, total_grouped, total_ungrouped)
 
 
 def main() -> None:
@@ -732,13 +760,15 @@ def main() -> None:
 
     if args.graph:
         graphs = [args.graph]
+        metrics_path = args.graph.parent / "grouping_metrics.md"
     else:
         graphs = sorted(args.graphs_dir.glob("graph_*.json"))
+        metrics_path = args.graphs_dir / "grouping_metrics.md"
     if not graphs:
         log.error("No graph_*.json found.")
         sys.exit(1)
 
-    asyncio.run(main_async(graphs, args.top_k_seed))
+    asyncio.run(main_async(graphs, args.top_k_seed, metrics_path))
 
 
 if __name__ == "__main__":
