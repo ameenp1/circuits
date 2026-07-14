@@ -345,6 +345,18 @@ def write_reports(reports: list[dict], out_dir: Path) -> None:
     (out_dir / "compare_features_llm.json").write_text(
         json.dumps(reports, indent=2, ensure_ascii=False), encoding="utf-8")
 
+    # Terminal-style missing lines: print them AND save verbatim to terminal_compare.md so the
+    # exact copy-pasteable block lives in a file too.
+    term_lines: list[str] = []
+    for r in reports:
+        for name in r["mlp_supernode_missing_in_slt"]:
+            term_lines.append(f'  MLP supernode missing in SLT features: "{name}"  [{r["slug"]}]')
+        for name in r["slt_supernode_missing_in_mlp"]:
+            term_lines.append(f'  SLT supernode missing in MLP features: "{name}"  [{r["slug"]}]')
+    for line in term_lines:
+        print(line)
+    (out_dir / "terminal_compare.md").write_text("\n".join(term_lines) + "\n", encoding="utf-8")
+
     L = ["# LLM-judge feature↔supernode comparison (MLP vs SLT)", "",
          "Only meaningful (specific) supernodes are compared — generic/grammatical labels are "
          "filtered out per direction on the source side. A gap = a real missing feature.", "",
@@ -364,14 +376,16 @@ def write_reports(reports: list[dict], out_dir: Path) -> None:
     sg = sum(r["slt_grouped"] for r in reports); su = sum(r["slt_ungrouped"] for r in reports)
     mfrac = mg / (mg + mu) if (mg + mu) else 0.0
     sfrac = sg / (sg + su) if (sg + su) else 0.0
+    n_graphs = len(reports) or 1
     L += ["## Grouping fraction (interpretability)",
           "Fraction of described features placed into a concept supernode vs. left Ungrouped. "
           "A lower fraction = more features the method could not group into a meaning — one sense "
-          "in which a method is harder to interpret.", "",
-          "| method | grouped | ungrouped | fraction grouped |",
-          "|---|---:|---:|---:|",
-          f"| **MLP** | {mg} | {mu} | {mfrac:.1%} |",
-          f"| **SLT** | {sg} | {su} | {sfrac:.1%} |",
+          "in which a method is harder to interpret. `avg grouped / graph` is the mean number of "
+          f"grouped features per graph over the {len(reports)} graphs.", "",
+          "| method | grouped | ungrouped | fraction grouped | avg grouped / graph |",
+          "|---|---:|---:|---:|---:|",
+          f"| **MLP** | {mg} | {mu} | {mfrac:.1%} | {mg / n_graphs:.1f} |",
+          f"| **SLT** | {sg} | {su} | {sfrac:.1%} | {sg / n_graphs:.1f} |",
           "",
           (f"> MLP groups **{mfrac:.1%}** of its features vs SLT's **{sfrac:.1%}**"
            + (" — MLP leaves more Ungrouped, consistent with it being harder to interpret."
@@ -400,8 +414,9 @@ def write_reports(reports: list[dict], out_dir: Path) -> None:
         L += _detail(r["slt_to_mlp"], r["slt_filtered_out"])
         L.append("")
     (out_dir / "compare_features_llm.md").write_text("\n".join(L) + "\n", encoding="utf-8")
-    print(f"\nWrote {out_dir/'compare_features_llm.json'} and .md ({len(reports)} graphs)")
-    print(f"Grouping fraction — MLP: {mfrac:.1%} grouped, SLT: {sfrac:.1%} grouped")
+    print(f"\nWrote {out_dir/'compare_features_llm.json'}, .md, and terminal_compare.md ({len(reports)} graphs)")
+    print(f"Grouping fraction — MLP: {mfrac:.1%} grouped ({mg / n_graphs:.1f}/graph), "
+          f"SLT: {sfrac:.1%} grouped ({sg / n_graphs:.1f}/graph)")
 
 
 # ===========================================================================
@@ -476,13 +491,7 @@ async def _amain(args) -> None:
     print(f"Comparing {len(entries)} graphs (filter + judge, concurrency={args.concurrency}, "
           f"model={JUDGE_MODEL})...")
     reports = await asyncio.gather(*[run_entry(e) for e in entries])
-    for r in reports:
-        for name in r["mlp_supernode_missing_in_slt"]:
-            print(f'  MLP supernode missing in SLT features: "{name}"  [{r["slug"]}]')
-        for name in r["slt_supernode_missing_in_mlp"]:
-            print(f'  SLT supernode missing in MLP features: "{name}"  [{r["slug"]}]')
-
-    write_reports(list(reports), args.out_dir)
+    write_reports(list(reports), args.out_dir)  # prints the missing lines + saves terminal_compare.md
 
 
 if __name__ == "__main__":
