@@ -246,19 +246,22 @@ def _needs_desc(neuron: dict) -> bool:
     return not d or d == "Error generating description"
 
 
-async def process_graph(path: Path, client: AsyncOpenAI, sem: asyncio.Semaphore) -> None:
+async def process_graph(path: Path, client: AsyncOpenAI, sem: asyncio.Semaphore,
+                        force: bool = False) -> None:
     graph = json.loads(path.read_text(encoding="utf-8"))
     prompt_text = graph.get("prompt", "Unknown prompt")
     neurons = graph.get("neurons", [])
     total = len(neurons)
 
-    # Resume: only describe neurons that don't already have a real description.
-    todo = [(i, n) for i, n in enumerate(neurons) if _needs_desc(n)]
+    # force: re-describe ALL neurons (e.g. an independent regeneration pass for validation).
+    # otherwise resume: only describe neurons that don't already have a real description.
+    todo = list(enumerate(neurons)) if force else [(i, n) for i, n in enumerate(neurons) if _needs_desc(n)]
     if not todo:
         log.info("=== %s — already fully described (%d neurons) — SKIP ===", path.name, total)
         return
 
-    log.info("=== %s — %d/%d neurons to describe — '%s' ===", path.name, len(todo), total, prompt_text)
+    log.info("=== %s — %d/%d neurons to describe%s — '%s' ===",
+             path.name, len(todo), total, " (force)" if force else "", prompt_text)
     tasks = [describe_neuron(n, prompt_text, client, sem, i + 1, total) for i, n in todo]
     await asyncio.gather(*tasks)
 
@@ -266,11 +269,11 @@ async def process_graph(path: Path, client: AsyncOpenAI, sem: asyncio.Semaphore)
     log.info("Wrote descriptions back into %s", path)
 
 
-async def main_async(graphs: list[Path]) -> None:
+async def main_async(graphs: list[Path], force: bool = False) -> None:
     client = AsyncOpenAI()
     sem = asyncio.Semaphore(CONCURRENCY_LIMIT)
     for p in graphs:
-        await process_graph(p, client, sem)
+        await process_graph(p, client, sem, force)
 
 
 def main() -> None:
@@ -281,6 +284,9 @@ def main() -> None:
     ap.add_argument("--exemplars", type=Path,
                     default=Path("custom_automation/np_data/mlp_exemplars.json"),
                     help="Corpus exemplar store from harvest_corpus_exemplars.py (the activating text).")
+    ap.add_argument("--force", action="store_true",
+                    help="Re-describe ALL neurons, ignoring existing descriptions (independent "
+                         "regeneration pass, e.g. for compare_mlp_validation.py).")
     args = ap.parse_args()
 
     if args.exemplars.exists():
@@ -297,7 +303,7 @@ def main() -> None:
         log.error("No graph_*.json found.")
         sys.exit(1)
 
-    asyncio.run(main_async(graphs))
+    asyncio.run(main_async(graphs, args.force))
 
 
 if __name__ == "__main__":
